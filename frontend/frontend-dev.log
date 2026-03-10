@@ -1,0 +1,108 @@
+
+> svp-frontend@1.0.0 dev
+> next dev -p 3000
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 2.5s
+ ○ Compiling /exam/booking ...
+ ✓ Compiled /exam/booking in 7.3s (299 modules)
+ GET /exam/booking 200 in 7889ms
+ GET /exam/booking 200 in 71ms
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 834ms (301 modules)
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 954ms
+ ○ Compiling /dashboard ...
+ ✓ Compiled /dashboard in 1607ms (349 modules)
+ ✓ Compiled /auth/login in 434ms (353 modules)
+ ✓ Compiled /auth/otp in 476ms (357 modules)
+ GET /exam/booking 200 in 150ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 43ms
+ ✓ Compiled in 2.3s (349 modules)
+ GET /exam/booking 200 in 1092ms
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 2.4s (351 modules)
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 2599ms
+ GET /exam/booking 200 in 281ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 493ms
+ ✓ Compiled in 2.2s (349 modules)
+ GET /exam/booking 200 in 179ms
+ ✓ Compiled in 1783ms (349 modules)
+ ✓ Compiled in 946ms (349 modules)
+ GET /exam/booking 200 in 219ms
+ GET /dashboard 200 in 449ms
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 1045ms (351 modules)
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 1213ms
+ ○ Compiling /auth/login ...
+ ✓ Compiled /auth/login in 1172ms (355 modules)
+ ✓ Compiled /auth/otp in 311ms (357 modules)
+ GET /exam/booking 200 in 262ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 60ms
+ ✓ Compiled in 2.8s (349 modules)
+ ✓ Compiled in 1198ms (349 modules)
+ ✓ Compiled in 771ms (349 modules)
+ ✓ Compiled in 836ms (349 modules)
+ GET /exam/booking 200 in 205ms
+ GET /exam/booking 200 in 58ms
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 1482ms (351 modules)
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 1569ms
+ GET /exam/booking 200 in 102ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 43ms
+ ✓ Compiled /auth/login in 481ms (355 modules)
+ ✓ Compiled /auth/otp in 288ms (357 modules)
+ GET /exam/booking 200 in 129ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 37ms
+ ✓ Compiled in 3.3s (349 modules)
+ GET /exam/booking 200 in 111ms
+ GET /exam/booking 200 in 282ms
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 1150ms (351 modules)
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 1291ms
+ GET /dashboard 200 in 101ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 52ms
+ GET /dashboard 200 in 440ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 70ms
+ ○ Compiling /auth/login ...
+ ✓ Compiled /auth/login in 888ms (355 modules)
+ ✓ Compiled /auth/otp in 491ms (357 modules)
+ ✓ Compiled in 2.2s (219 modules)
+ ✓ Compiled in 413ms (119 modules)
+ ○ Compiling /exam/booking ...
+ ✓ Compiled /exam/booking in 1436ms (353 modules)
+ GET /exam/booking 200 in 2070ms
+ GET /dashboard 200 in 80ms
+ ✓ Compiled /_error in 468ms (340 modules)
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 1182ms
+ ✓ Compiled /auth/login in 302ms (342 modules)
+ ○ Compiling /exam/booking ...
+ ✓ Compiled /exam/booking in 2.8s (353 modules)
+ GET /exam/booking 200 in 3847ms
+ ✓ Compiled in 3s (338 modules)
+ ○ Compiling /exam/booking ...
+ ✓ Compiled /exam/booking in 1745ms (353 modules)
+ GET /exam/booking 200 in 2792ms
+   Reload env: .env.local
+ ✓ Compiled in 4.6s (338 modules)
+ GET /dashboard 200 in 538ms
+ ✓ Compiled /_error in 313ms (340 modules)
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 389ms
+ ✓ Compiled in 779ms (340 modules)
+ ○ Compiling /exam/booking ...
+ ✓ Compiled /exam/booking in 683ms (355 modules)
+ GET /exam/booking 200 in 1389ms
+ GET /dashboard 200 in 361ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 89ms
+ ○ Compiling /auth/login ...
+ ✓ Compiled /auth/login in 2.3s (342 modules)
+ ✓ Compiled /exam/booking in 457ms (357 modules)
+ GET /exam/booking 200 in 1253ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 325ms
+ GET /exam/booking 200 in 401ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 68ms
+ ✓ Compiled in 4.3s (349 modules)
+^C^C
