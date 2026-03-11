@@ -32,6 +32,13 @@
         "site_id": 3001,
         "site_city_name": "Mymensingh",
         "test_center_name": "Main Test Center",
+        "test_center": {
+          "city": "Rajshahi",
+          "country_code": "+880",
+          "country_id": 78,
+          "site_id": 23234234,
+          "name": "Rajshahi Main Test Center"
+        },
         "start_at": "2026-03-15T09:00:00+06:00"
       }
     ]

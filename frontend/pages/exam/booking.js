@@ -4,6 +4,12 @@ import { api } from '../../lib/api';
 
 function pickArray(json) {
   if (Array.isArray(json)) return json;
+  if (Array.isArray(json?.occupations)) return json.occupations;
+  if (Array.isArray(json?.exam_sessions)) return json.exam_sessions;
+  if (Array.isArray(json?.available_dates)) return json.available_dates;
+  if (Array.isArray(json?.data?.occupations)) return json.data.occupations;
+  if (Array.isArray(json?.data?.exam_sessions)) return json.data.exam_sessions;
+  if (Array.isArray(json?.data?.available_dates)) return json.data.available_dates;
   if (Array.isArray(json?.data)) return json.data;
   if (Array.isArray(json?.items)) return json.items;
   if (Array.isArray(json?.results)) return json.results;
@@ -12,6 +18,32 @@ function pickArray(json) {
 
 function extractHoldId(json) {
   return json?.hold_id || json?.id || json?.data?.hold_id || json?.data?.id || null;
+}
+
+function getPrometricCodes(occupation) {
+  return occupation?.category?.prometric_codes || [];
+}
+
+function getSessionId(session) {
+  return session?.id || session?.exam_session_id || '';
+}
+
+function getSessionSiteId(session) {
+  return session?.site_id ?? session?.test_center?.site_id ?? session?.test_center_id ?? session?.site?.id ?? '';
+}
+
+function getSessionSiteCity(session) {
+  return session?.test_center?.city || session?.site_city || session?.city || session?.site_city_name || session?.test_center_city || '';
+}
+
+function getSessionLabel(session) {
+  const sessionId = getSessionId(session);
+  const testCenter = session?.test_center;
+  const centerName = testCenter?.name || session?.test_center_name || 'Unknown Center';
+  const centerCity = testCenter?.city || session?.city || session?.site_city_name || '';
+  const siteId = getSessionSiteId(session);
+  const startAt = session?.start_at || session?.exam_date || '';
+  return `#${sessionId} - ${centerName}${centerCity ? ` - ${centerCity}` : ''}${siteId ? ` - site_id ${siteId}` : ''}${startAt ? ` - ${startAt}` : ''}`;
 }
 
 export default function ExamBooking() {
@@ -24,7 +56,9 @@ export default function ExamBooking() {
   const [city, setCity] = useState('Mymensingh');
   const [examDate, setExamDate] = useState('');
   const [occupationId, setOccupationId] = useState('');
-  const [languageCode, setLanguageCode] = useState('MTDBB');
+  const [languageCode, setLanguageCode] = useState('');
+  const [siteId, setSiteId] = useState('');
+  const [siteCity, setSiteCity] = useState('');
   const [methodology, setMethodology] = useState('in_person');
   const [availableDatesRaw, setAvailableDatesRaw] = useState(null);
   const [sessionsRaw, setSessionsRaw] = useState(null);
@@ -45,7 +79,11 @@ export default function ExamBooking() {
       setOccupationsRaw(res);
       setOut(JSON.stringify(res, null, 2));
       const arr = pickArray(res);
-      if (!occupationId && arr?.[0]?.id) setOccupationId(String(arr[0].id));
+      if (arr?.[0]?.id) {
+        if (!occupationId) setOccupationId(String(arr[0].id));
+        const firstLanguageCode = getPrometricCodes(arr[0])[0]?.code;
+        if (!languageCode && firstLanguageCode) setLanguageCode(firstLanguageCode);
+      }
     } catch (e) {
       setOut(JSON.stringify(e.data || e.message, null, 2));
     }
@@ -91,8 +129,13 @@ export default function ExamBooking() {
       setSessionsRaw(res);
       setOut(JSON.stringify(res, null, 2));
       const arr = pickArray(res);
-      const firstId = arr?.[0]?.id || arr?.[0]?.exam_session_id;
+      const first = arr?.[0];
+      const firstId = getSessionId(first);
       if (firstId) setSelectedSessionId(String(firstId));
+      if (first) {
+        setSiteId(String(getSessionSiteId(first) || ''));
+        setSiteCity(String(getSessionSiteCity(first) || ''));
+      }
     } catch (e) {
       setOut(JSON.stringify(e.data || e.message, null, 2));
     }
@@ -135,8 +178,8 @@ export default function ExamBooking() {
           exam_session_id: Number(selectedSessionId),
           occupation_id: Number(occupationId),
           language_code: languageCode,
-          site_id: null,
-          site_city: null,
+          site_id: siteId ? Number(siteId) : null,
+          site_city: siteCity || null,
           hold_id: holdRaw ? extractHoldId(holdRaw) : null,
           methodology,
         },
@@ -150,6 +193,33 @@ export default function ExamBooking() {
 
   const sessionList = useMemo(() => pickArray(sessionsRaw) || [], [sessionsRaw]);
   const occupationList = useMemo(() => pickArray(occupationsRaw) || [], [occupationsRaw]);
+  const selectedOccupation = useMemo(
+    () => occupationList.find((occupation) => String(occupation?.id) === String(occupationId)) || null,
+    [occupationList, occupationId]
+  );
+  const languageOptions = useMemo(() => getPrometricCodes(selectedOccupation), [selectedOccupation]);
+
+  useEffect(() => {
+    if (!selectedOccupation) return;
+    const category = selectedOccupation?.category_id || selectedOccupation?.category?.id;
+    if (category) setCategoryId(String(category));
+    if (!languageOptions.length) return;
+    const hasSelected = languageOptions.some((option) => option?.code === languageCode);
+    if (!hasSelected && languageOptions[0]?.code) {
+      setLanguageCode(languageOptions[0].code);
+    }
+  }, [selectedOccupation, languageOptions, languageCode]);
+
+  useEffect(() => {
+    const selectedSession = sessionList.find((session) => String(getSessionId(session)) === String(selectedSessionId));
+    if (!selectedSession) return;
+    setSiteId(String(getSessionSiteId(selectedSession) || ''));
+    setSiteCity(String(getSessionSiteCity(selectedSession) || ''));
+    if (!city) {
+      const nextCity = getSessionSiteCity(selectedSession);
+      if (nextCity) setCity(String(nextCity));
+    }
+  }, [sessionList, selectedSessionId, city]);
 
   return (
     <div className="container">
@@ -208,15 +278,15 @@ export default function ExamBooking() {
 
         {sessionList.length > 0 && (
           <div style={{ marginTop: 12 }}>
-            <label>Pick exam_session_id</label>
-            <select value={selectedSessionId} onChange={(e) => setSelectedSessionId(e.target.value)}>
-              {sessionList.map((session) => (
-                <option key={session.id || session.exam_session_id} value={session.id || session.exam_session_id}>
-                  #{session.id || session.exam_session_id} {session.city ? `- ${session.city}` : ''} {session.start_at ? `- ${session.start_at}` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+                <label>Pick exam_session_id</label>
+                <select value={selectedSessionId} onChange={(e) => setSelectedSessionId(e.target.value)}>
+                  {sessionList.map((session) => (
+                    <option key={getSessionId(session)} value={getSessionId(session)}>
+                      {getSessionLabel(session)}
+                    </option>
+                  ))}
+                </select>
+              </div>
         )}
       </div>
 
@@ -231,8 +301,18 @@ export default function ExamBooking() {
             </select>
           </div>
           <div>
-            <label>language_code</label>
-            <input value={languageCode} onChange={(e) => setLanguageCode(e.target.value)} />
+            <label>Language</label>
+            {languageOptions.length > 0 ? (
+              <select value={languageCode} onChange={(e) => setLanguageCode(e.target.value)}>
+                {languageOptions.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.english_name || option.language_code || option.code}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input value={languageCode} onChange={(e) => setLanguageCode(e.target.value)} placeholder="Language code" />
+            )}
           </div>
         </div>
 
@@ -257,6 +337,10 @@ export default function ExamBooking() {
           <div>
             <label>Selected exam_session_id</label>
             <input value={selectedSessionId} readOnly />
+            <label>site_id</label>
+            <input value={siteId} readOnly />
+            <label>site_city</label>
+            <input value={siteCity} readOnly />
             <p className="small">Temporary seat is optional, but recommended.</p>
           </div>
         </div>

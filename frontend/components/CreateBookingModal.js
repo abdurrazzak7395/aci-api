@@ -17,6 +17,31 @@ function pickArray(json) {
   return [];
 }
 
+function getPrometricCodes(occupation) {
+  return occupation?.category?.prometric_codes || [];
+}
+
+function getSessionId(session) {
+  return session?.id || session?.exam_session_id || "";
+}
+
+function getSessionSiteId(session) {
+  return session?.site_id ?? session?.test_center?.site_id ?? session?.test_center_id ?? session?.site?.id ?? "";
+}
+
+function getSessionSiteCity(session) {
+  return session?.test_center?.city ?? session?.site_city ?? session?.city ?? session?.site_city_name ?? session?.test_center_city ?? "";
+}
+
+function getSessionLabel(session) {
+  const sessionId = getSessionId(session);
+  const centerName = session?.test_center?.name || session?.test_center_name || "Unknown Center";
+  const centerCity = getSessionSiteCity(session);
+  const siteId = getSessionSiteId(session);
+  const startAt = session?.start_at || session?.exam_date || "";
+  return `#${sessionId} ${centerName ? `- ${centerName}` : ""}${centerCity ? ` - ${centerCity}` : ""}${siteId ? ` - site_id ${siteId}` : ""}${startAt ? ` - ${startAt}` : ""}`;
+}
+
 export default function CreateBookingModal({ open, onClose }) {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -85,19 +110,14 @@ export default function CreateBookingModal({ open, onClose }) {
     if (!selectedOccupation) return;
     const cid = selectedOccupation?.category_id || selectedOccupation?.category?.id;
     if (cid) setCategoryId(String(cid));
-    const codes = (selectedOccupation?.category?.prometric_codes || []).map((p) => p?.code).filter(Boolean);
-    if (codes.length && !codes.includes(languageCode)) setLanguageCode(codes[0]);
+    const codes = getPrometricCodes(selectedOccupation);
+    if (codes.length && !codes.some((p) => p?.code === languageCode)) setLanguageCode(codes[0]?.code || "");
   }, [selectedOccupation, languageCode]);
 
   useEffect(() => {
     if (!selectedSession) return;
-    const sid = selectedSession?.site_id ?? selectedSession?.test_center_id ?? selectedSession?.site?.id;
-    const scity =
-      selectedSession?.site_city ??
-      selectedSession?.city ??
-      selectedSession?.site_city_name ??
-      selectedSession?.test_center_city ??
-      "";
+    const sid = getSessionSiteId(selectedSession);
+    const scity = getSessionSiteCity(selectedSession);
     setSiteId(sid == null ? "" : String(sid));
     setSiteCity(String(scity || ""));
     if (!city && selectedSession?.city) setCity(selectedSession.city);
@@ -118,8 +138,8 @@ export default function CreateBookingModal({ open, onClose }) {
       const res = await api(`/api/svp/exam-sessions?${qs}`);
       const list = pickArray(res);
       setSessions(list);
-      if (list?.[0]?.id || list?.[0]?.exam_session_id) {
-        setSessionId(String(list[0]?.id || list[0]?.exam_session_id));
+      if (getSessionId(list?.[0])) {
+        setSessionId(String(getSessionId(list[0])));
       }
       if (!city) {
         const autoCity =
@@ -242,6 +262,8 @@ export default function CreateBookingModal({ open, onClose }) {
     }
   }
 
+  const languageOptions = useMemo(() => getPrometricCodes(selectedOccupation), [selectedOccupation]);
+
   function resetAndClose() {
     setMsg("");
     setHold(null);
@@ -340,14 +362,24 @@ export default function CreateBookingModal({ open, onClose }) {
           <label>Test Center / Session *</label>
           <select value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
             {sessionList.map((s) => (
-              <option key={s.id} value={s.id}>
-                #{s.id} {s.test_center_name ? `- ${s.test_center_name}` : ""} {s.start_at ? `- ${s.start_at}` : ""}
+              <option key={getSessionId(s)} value={getSessionId(s)}>
+                {getSessionLabel(s)}
               </option>
             ))}
           </select>
 
-          <label>Language Code</label>
-          <input value={languageCode} onChange={(e) => setLanguageCode(e.target.value)} />
+          <label>Language</label>
+          {languageOptions.length > 0 ? (
+            <select value={languageCode} onChange={(e) => setLanguageCode(e.target.value)}>
+              {languageOptions.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.english_name || option.language_code || option.code}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input value={languageCode} onChange={(e) => setLanguageCode(e.target.value)} />
+          )}
 
           <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
             <button onClick={createHold} disabled={loading} style={{ flex: 1 }}>Create Hold</button>

@@ -26,8 +26,8 @@
     { "key": "methodology", "value": "in_person" },
     { "key": "languageCode", "value": "EMCEE" },
     { "key": "sessionId", "value": "1055182" },
-    { "key": "siteId", "value": "3001" },
-    { "key": "siteCity", "value": "Mymensingh" },
+    { "key": "siteId", "value": "23234234" },
+    { "key": "siteCity", "value": "Rajshahi" },
     { "key": "holdId", "value": "" },
     { "key": "reservationId", "value": "" },
     { "key": "paymentMethod", "value": "card" },
@@ -197,8 +197,8 @@
                   "  if (Array.isArray(list) && list.length) {",
                   "    const first = list[0];",
                   "    const id = first.id || first.exam_session_id;",
-                  "    const siteId = first.site_id || first.test_center_id || first.site?.id;",
-                  "    const city = first.site_city || first.city || first.site_city_name || first.test_center_city;",
+                  "    const siteId = first.site_id || first.test_center?.site_id || first.test_center_id || first.site?.id;",
+                  "    const city = first.test_center?.city || first.site_city || first.city || first.site_city_name || first.test_center_city;",
                   "    if (id) pm.collectionVariables.set('sessionId', String(id));",
                   "    if (siteId != null) pm.collectionVariables.set('siteId', String(siteId));",
                   "    if (city) pm.collectionVariables.set('siteCity', String(city));",
@@ -223,7 +223,7 @@
                 { "key": "exam_date", "value": "{{examDate}}" }
               ]
             },
-            "description": "Loads exam sessions and stores sessionId, siteId, and siteCity from the first result."
+            "description": "Loads exam sessions and stores sessionId, siteId, and siteCity from the first result. Supports nested test_center.site_id."
           },
           "response": []
         }
@@ -300,7 +300,7 @@
               "host": [ "{{base_url}}" ],
               "path": [ "api", "svp", "exam-reservations" ]
             },
-            "description": "Books the reservation. If you skip the hold step, set holdId to null manually before sending."
+            "description": "Books the reservation using the selected session, selected language code, and the resolved site_id/site_city. If you skip the hold step, set holdId to null manually before sending."
           },
           "response": []
         }
