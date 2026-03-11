@@ -107,6 +107,16 @@ function buildCenterOptions(items) {
   return Array.from(map.values());
 }
 
+function buildCityOptions(items) {
+  return Array.from(
+    new Set(
+      items
+        .map((item) => String(getSessionSiteCity(item) || '').trim())
+        .filter(Boolean)
+    )
+  );
+}
+
 function formatDateLabel(value) {
   if (!value) return '-';
   const parsed = new Date(value);
@@ -123,6 +133,7 @@ export default function BookingPage() {
   const [availableDate, setAvailableDate] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [methodology, setMethodology] = useState('in_person');
+  const [selectedCity, setSelectedCity] = useState('');
   const [selectedCenterId, setSelectedCenterId] = useState('');
   const [siteId, setSiteId] = useState('');
   const [siteCity, setSiteCity] = useState('');
@@ -143,12 +154,19 @@ export default function BookingPage() {
     [occupations, selectedOccupationId]
   );
 
-  const centerOptions = useMemo(() => buildCenterOptions(sessions), [sessions]);
+  const cityOptions = useMemo(() => buildCityOptions(sessions), [sessions]);
+
+  const cityFilteredSessions = useMemo(() => {
+    if (!selectedCity) return sessions;
+    return sessions.filter((item) => String(getSessionSiteCity(item)) === String(selectedCity));
+  }, [sessions, selectedCity]);
+
+  const centerOptions = useMemo(() => buildCenterOptions(cityFilteredSessions), [cityFilteredSessions]);
 
   const filteredSessions = useMemo(() => {
-    if (!selectedCenterId) return sessions;
-    return sessions.filter((item) => String(getSessionSiteId(item)) === String(selectedCenterId));
-  }, [sessions, selectedCenterId]);
+    if (!selectedCenterId) return cityFilteredSessions;
+    return cityFilteredSessions.filter((item) => String(getSessionSiteId(item)) === String(selectedCenterId));
+  }, [cityFilteredSessions, selectedCenterId]);
 
   const selectedSession = useMemo(
     () => filteredSessions.find((item) => String(getSessionId(item)) === String(sessionId)) || null,
@@ -162,8 +180,7 @@ export default function BookingPage() {
 
       try {
         const data = await api('/api/svp/occupations?locale=en&per_page=200&page=1');
-        const items = pickArray(data).map(normalizeOccupation);
-        setOccupations(items);
+        setOccupations(pickArray(data).map(normalizeOccupation));
       } catch (err) {
         setError(err?.message || 'Failed to load occupations');
       } finally {
@@ -183,21 +200,123 @@ export default function BookingPage() {
     if (router.query.languageCode) setLanguageCode(String(router.query.languageCode));
     if (router.query.siteId) setSelectedCenterId(String(router.query.siteId));
     if (router.query.siteId) setSiteId(String(router.query.siteId));
+    if (router.query.siteCity) setSelectedCity(String(router.query.siteCity));
     if (router.query.siteCity) setSiteCity(String(router.query.siteCity));
     if (router.query.examDate) setAvailableDate(normalizeDateValue(String(router.query.examDate)));
     if (router.query.reschedule === '1') {
-      setStatus('Reschedule mode active. Select a new date, center, and session.');
+      setStatus('Reschedule mode active. Select a new city, center, and session.');
     }
   }, [router.isReady, router.query]);
 
   useEffect(() => {
     if (!selectedOccupation) return;
     if (!categoryId && selectedOccupation.categoryId) setCategoryId(String(selectedOccupation.categoryId));
-    if (!methodology && selectedOccupation.methodology) setMethodology(String(selectedOccupation.methodology));
     if (!languageCode && selectedOccupation.languageCodes[0]?.code) {
       setLanguageCode(String(selectedOccupation.languageCodes[0].code));
     }
-  }, [selectedOccupation, categoryId, methodology, languageCode]);
+  }, [selectedOccupation, categoryId, languageCode]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadDates() {
+      if (!selectedOccupationId) {
+        setAvailableDates([]);
+        setAvailableDate('');
+        return;
+      }
+
+      setLoadingDates(true);
+      setError('');
+
+      try {
+        const params = new URLSearchParams({
+          occupation_id: String(selectedOccupationId),
+          methodology_type: methodology || 'in_person',
+          locale: 'en',
+        });
+
+        if (categoryId) params.set('category_id', categoryId);
+
+        const data = await api(`/api/svp/available-dates?${params.toString()}`);
+        const dates = pickArray(data)
+          .map((item) => {
+            const value = typeof item === 'string' ? item : item?.date || item?.available_date || '';
+            return normalizeDateValue(value);
+          })
+          .filter(Boolean);
+
+        if (!active) return;
+        setAvailableDates(dates);
+        setAvailableDate((prev) => (prev && dates.includes(prev) ? prev : dates[0] || ''));
+      } catch (err) {
+        if (!active) return;
+        setAvailableDates([]);
+        setError(err?.message || 'Failed to load available dates');
+      } finally {
+        if (active) setLoadingDates(false);
+      }
+    }
+
+    loadDates();
+
+    return () => {
+      active = false;
+    };
+  }, [selectedOccupationId, methodology, categoryId]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadSessions() {
+      if (!selectedOccupationId || !availableDate) {
+        setSessions([]);
+        return;
+      }
+
+      setLoadingSessions(true);
+      setError('');
+
+      try {
+        const params = new URLSearchParams({
+          occupation_id: String(selectedOccupationId),
+          available_date: availableDate,
+          methodology_type: methodology || 'in_person',
+          locale: 'en',
+        });
+
+        if (categoryId) params.set('category_id', categoryId);
+
+        const data = await api(`/api/svp/exam-sessions?${params.toString()}`);
+        if (!active) return;
+        setSessions(pickArray(data));
+      } catch (err) {
+        if (!active) return;
+        setSessions([]);
+        setError(err?.message || 'Failed to load test sessions');
+      } finally {
+        if (active) setLoadingSessions(false);
+      }
+    }
+
+    loadSessions();
+
+    return () => {
+      active = false;
+    };
+  }, [selectedOccupationId, availableDate, methodology, categoryId]);
+
+  useEffect(() => {
+    if (!cityOptions.length) {
+      setSelectedCity('');
+      return;
+    }
+
+    const hasSelected = cityOptions.some((item) => item === selectedCity);
+    if (!selectedCity || !hasSelected) {
+      setSelectedCity(cityOptions[0]);
+    }
+  }, [cityOptions, selectedCity]);
 
   useEffect(() => {
     if (!centerOptions.length) {
@@ -240,74 +359,6 @@ export default function BookingPage() {
       setLanguageCode(String(codes[0].code || codes[0].language_code));
     }
   }, [selectedSession]);
-
-  async function searchDates() {
-    if (!selectedOccupationId) {
-      setError('Select occupation first');
-      return;
-    }
-
-    setLoadingDates(true);
-    setError('');
-    setStatus('');
-
-    try {
-      const params = new URLSearchParams({
-        occupation_id: String(selectedOccupationId),
-        methodology_type: methodology || 'in_person',
-        locale: 'en',
-      });
-
-      if (categoryId) params.set('category_id', categoryId);
-
-      const data = await api(`/api/svp/available-dates?${params.toString()}`);
-      const dates = pickArray(data)
-        .map((item) => {
-          const value = typeof item === 'string' ? item : item?.date || item?.available_date || '';
-          return normalizeDateValue(value);
-        })
-        .filter(Boolean);
-
-      setAvailableDates(dates);
-      if (!availableDate && dates[0]) setAvailableDate(dates[0]);
-      setStatus(dates.length ? 'Available dates loaded' : 'No available dates found');
-    } catch (err) {
-      setError(err?.message || 'Failed to load available dates');
-    } finally {
-      setLoadingDates(false);
-    }
-  }
-
-  async function loadSessions() {
-    if (!selectedOccupationId || !availableDate) {
-      setError('Select occupation and date first');
-      return;
-    }
-
-    setLoadingSessions(true);
-    setError('');
-    setStatus('');
-
-    try {
-      const params = new URLSearchParams({
-        occupation_id: String(selectedOccupationId),
-        available_date: availableDate,
-        methodology_type: methodology || 'in_person',
-        locale: 'en',
-      });
-
-      if (categoryId) params.set('category_id', categoryId);
-
-      const data = await api(`/api/svp/exam-sessions?${params.toString()}`);
-      const items = pickArray(data);
-      setSessions(items);
-      setStatus(items.length ? 'Test centers and sessions loaded from API' : 'No test sessions found');
-    } catch (err) {
-      setError(err?.message || 'Failed to load test sessions');
-    } finally {
-      setLoadingSessions(false);
-    }
-  }
 
   async function createHold() {
     if (!sessionId) {
@@ -441,6 +492,20 @@ export default function BookingPage() {
             </div>
 
             <div className="field-block">
+              <span>City</span>
+              <select value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)} disabled={!cityOptions.length}>
+                <option value="">
+                  {loadingSessions ? 'Loading cities...' : cityOptions.length ? 'Select city' : 'Choose occupation first'}
+                </option>
+                {cityOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field-block">
               <span>Category ID</span>
               <input value={categoryId} onChange={(e) => setCategoryId(e.target.value)} placeholder="Category ID" />
             </div>
@@ -459,8 +524,12 @@ export default function BookingPage() {
 
             <div className="field-block">
               <span>Test center</span>
-              <select value={selectedCenterId} onChange={(e) => setSelectedCenterId(e.target.value)}>
-                <option value="">Select test center</option>
+              <select
+                value={selectedCenterId}
+                onChange={(e) => setSelectedCenterId(e.target.value)}
+                disabled={!centerOptions.length}
+              >
+                <option value="">{loadingSessions ? 'Loading centers...' : 'Select test center'}</option>
                 {centerOptions.map((item) => (
                   <option key={item.siteId} value={item.siteId}>
                     {item.name}
@@ -471,8 +540,8 @@ export default function BookingPage() {
 
             <div className="field-block">
               <span>Session</span>
-              <select value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
-                <option value="">Select session</option>
+              <select value={sessionId} onChange={(e) => setSessionId(e.target.value)} disabled={!filteredSessions.length}>
+                <option value="">{loadingSessions ? 'Loading sessions...' : 'Select session'}</option>
                 {filteredSessions.map((item) => (
                   <option key={getSessionId(item)} value={getSessionId(item)}>
                     {getSessionCenterName(item)} | Session #{getSessionId(item)}
@@ -482,7 +551,7 @@ export default function BookingPage() {
             </div>
 
             <div className="field-block">
-              <span>City</span>
+              <span>Selected City</span>
               <input value={siteCity} readOnly placeholder="Auto" />
             </div>
 
@@ -500,15 +569,6 @@ export default function BookingPage() {
               <span>Reservation ID</span>
               <input value={reservationId} readOnly placeholder="-" />
             </div>
-          </div>
-
-          <div className="inline-actions">
-            <button className="subtle-btn" type="button" onClick={searchDates} disabled={loadingDates}>
-              {loadingDates ? 'Loading dates...' : 'Load available dates'}
-            </button>
-            <button className="subtle-btn" type="button" onClick={loadSessions} disabled={loadingSessions}>
-              {loadingSessions ? 'Loading sessions...' : 'Load test centers'}
-            </button>
           </div>
 
           {availableDates.length ? (
@@ -586,8 +646,7 @@ export default function BookingPage() {
           gap: 10px;
         }
         .ghost-btn,
-        .primary-btn,
-        .subtle-btn {
+        .primary-btn {
           min-height: 42px;
           padding: 0 18px;
           border-radius: 6px;
@@ -601,9 +660,6 @@ export default function BookingPage() {
           background: #13828c;
           border-color: #13828c;
           color: #fff;
-        }
-        .subtle-btn {
-          background: #f8fbfc;
         }
         .booking-no {
           margin-bottom: 18px;
@@ -644,7 +700,7 @@ export default function BookingPage() {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 18px 26px;
-          padding: 22px 24px 12px;
+          padding: 22px 24px 24px;
         }
         .field-block {
           display: flex;
@@ -667,16 +723,16 @@ export default function BookingPage() {
           color: #24324d;
           padding: 0 12px;
         }
-        .inline-actions {
-          display: flex;
-          gap: 12px;
-          padding: 8px 24px 0;
+        .field-block select:disabled,
+        .field-block input:disabled {
+          background: #f5f7f9;
+          color: #8d97a8;
         }
         .chips {
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
-          padding: 18px 24px 24px;
+          padding: 0 24px 24px;
         }
         .chip {
           min-height: 38px;
@@ -704,8 +760,7 @@ export default function BookingPage() {
         @media (max-width: 720px) {
           .topbar,
           .page-head,
-          .head-actions,
-          .inline-actions {
+          .head-actions {
             flex-direction: column;
             align-items: stretch;
           }
