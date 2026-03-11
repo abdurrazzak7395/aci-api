@@ -42,7 +42,6 @@ export default function Dashboard() {
             <p className="page-copy">Manage authentication, inspect live proxy endpoints, and launch the booking flow from one place.</p>
           </div>
           <div className="page-actions">
-            <a className="text-link" href="/exam/booking">Open booking page</a>
             <button className="secondary-button" onClick={logout}>Logout</button>
           </div>
         </div>

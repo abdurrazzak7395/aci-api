@@ -55,12 +55,7 @@ function getSessionSiteCity(session) {
 }
 
 function getSessionLabel(session) {
-  const sessionId = getSessionId(session);
-  const centerName = session?.test_center_name || session?.test_center?.name || 'Unknown Center';
-  const centerCity = session?.city || session?.site_city_name || session?.test_center?.city || '';
-  const siteId = getSessionSiteId(session);
-  const startAt = session?.start_at || session?.exam_date || '';
-  return `#${sessionId} - ${centerName}${centerCity ? ` - ${centerCity}` : ''}${siteId ? ` - site_id ${siteId}` : ''}${startAt ? ` - ${startAt}` : ''}`;
+  return session?.test_center_name || session?.test_center?.name || 'Unknown Center';
 }
 
 export default function ExamBooking() {
@@ -259,8 +254,8 @@ export default function ExamBooking() {
         <div className="page-header">
           <div>
             <p className="eyebrow">Exam workflow</p>
-            <h1>Exam Search and Booking</h1>
-            <p className="page-copy">Search dates, choose a real test center, select readable language options, and submit the reservation flow in one place.</p>
+            <h1>Create new booking</h1>
+            <p className="page-copy">Load live sessions from the real API, choose the real test center name, and complete the reservation flow.</p>
           </div>
           <div className="page-actions">
             <Link className="text-link" href="/dashboard">Back to dashboard</Link>
@@ -302,7 +297,7 @@ export default function ExamBooking() {
         <div className="section-card">
           <div className="section-title-row">
             <h2>2. Load test centers</h2>
-            <p className="section-copy">Choose a city and date, then select a real test center name with its visible <code>site_id</code>.</p>
+            <p className="section-copy">Choose a city and date, then select the real <code>test_center_name</code> returned by the API.</p>
           </div>
           <div className="form-grid">
             <div className="field-group">
@@ -381,6 +376,15 @@ export default function ExamBooking() {
             <div className="field-group">
               <label>Selected Session ID</label>
               <input value={selectedSessionId} readOnly />
+              <label>Test Center Name</label>
+              <input
+                value={
+                  sessionList.find((session) => String(getSessionId(session)) === String(selectedSessionId))?.test_center_name ||
+                  sessionList.find((session) => String(getSessionId(session)) === String(selectedSessionId))?.test_center?.name ||
+                  ''
+                }
+                readOnly
+              />
               <label>Site ID</label>
               <input value={siteId} readOnly />
               <label>Site City</label>
