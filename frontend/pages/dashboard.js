@@ -35,48 +35,59 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="container">
-      <h2>Dashboard</h2>
-      <p className="small"><a href="/exam/booking">Exam Search + Booking</a></p>
-      {me && (
-        <div className="card">
-          <strong>Signed in as:</strong> {me.fullName || me.login}
-        </div>
-      )}
-      <div className="card">
-        <p className="small">
-          Access token is auto-loaded from localStorage. If it expires, the client auto-calls
-          `/api/auth/refresh`, then retries once using the new access token.
-        </p>
-
-        <div className="row" style={{ marginTop: 12 }}>
-          <button onClick={() => setOpenBooking(true)}>Create New Booking</button>
+    <div className="app-shell">
+      <div className="app-panel app-panel-wide">
+        <div className="page-header">
+          <div>
+            <p className="eyebrow">SVP workspace</p>
+            <h1>Dashboard</h1>
+            <p className="page-copy">Manage authentication, inspect live proxy endpoints, and launch the booking flow from one place.</p>
+          </div>
+          <div className="page-actions">
+            <a className="text-link" href="/exam/booking">Open booking page</a>
+            <button className="secondary-button" onClick={logout}>Logout</button>
+          </div>
         </div>
 
-        <div className="row">
-          <button onClick={() => call('/api/me')}>/api/me</button>
-          <button onClick={() => call('/api/svp/permissions')}>SVP permissions</button>
-          <button onClick={() => call('/api/svp/occupations')}>SVP occupations</button>
+        {me && (
+          <div className="info-banner">
+            <span>Signed in as</span>
+            <strong>{me.fullName || me.login}</strong>
+          </div>
+        )}
+
+        <div className="section-card">
+          <div className="section-title-row">
+            <h2>Quick actions</h2>
+            <p className="section-copy">
+              Access token is auto-loaded from localStorage. If it expires, the client calls
+              <code> /api/auth/refresh </code>
+              and retries once.
+            </p>
+          </div>
+
+          <div className="action-grid">
+            <button className="primary-button" onClick={() => setOpenBooking(true)}>Create new booking</button>
+            <button className="secondary-button" onClick={() => call('/api/me')}>Load profile</button>
+            <button className="secondary-button" onClick={() => call('/api/svp/permissions')}>Permissions</button>
+            <button className="secondary-button" onClick={() => call('/api/svp/occupations')}>Occupations</button>
+            <button className="secondary-button" onClick={() => call('/api/svp/exam-constraints')}>Exam constraints</button>
+            <button className="secondary-button" onClick={() => call('/api/svp/certificate-price')}>Certificate price</button>
+            <button className="secondary-button" onClick={() => call('/api/svp/feature-flags')}>Feature flags</button>
+            <button className="secondary-button" onClick={() => call('/api/auth/refresh', { method: 'POST' })}>Force refresh</button>
+          </div>
         </div>
 
-        <div className="row" style={{ marginTop: 12 }}>
-          <button onClick={() => call('/api/svp/exam-constraints')}>SVP exam_constraints</button>
-          <button onClick={() => call('/api/svp/certificate-price')}>SVP certificate_price</button>
-          <button onClick={() => call('/api/svp/feature-flags')}>SVP feature_flags</button>
+        <div className="section-card">
+          <div className="section-title-row">
+            <h2>Output</h2>
+            <p className="section-copy">Latest backend response or error payload.</p>
+          </div>
+          <pre className="output-panel">{out || 'No requests run yet.'}</pre>
         </div>
 
-        <div className="row" style={{ marginTop: 12 }}>
-          <button onClick={() => call('/api/auth/refresh', { method: 'POST' })}>Force refresh</button>
-          <button onClick={logout}>Logout</button>
-        </div>
+        <CreateBookingModal open={openBooking} onClose={() => setOpenBooking(false)} />
       </div>
-
-      <div className="card">
-        <h3>Output</h3>
-        <pre>{out}</pre>
-      </div>
-
-      <CreateBookingModal open={openBooking} onClose={() => setOpenBooking(false)} />
     </div>
   );
 }

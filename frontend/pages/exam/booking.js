@@ -222,144 +222,159 @@ export default function ExamBooking() {
   }, [sessionList, selectedSessionId, city]);
 
   return (
-    <div className="container">
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-        <h2 style={{ margin: 0 }}>Exam Search + Booking</h2>
-        <Link href="/dashboard">Back</Link>
-      </div>
-
-      <div className="card">
-        <h3>1) Search Available Dates</h3>
-        <form onSubmit={searchAvailableDates}>
-          <div className="row">
-            <div>
-              <label>category_id</label>
-              <input value={categoryId} onChange={(e) => setCategoryId(e.target.value)} />
-            </div>
-            <div>
-              <label>start_at_date_from (YYYY-MM-DD)</label>
-              <input value={startDateFrom} onChange={(e) => setStartDateFrom(e.target.value)} placeholder="auto = today" />
-            </div>
-          </div>
-
-          <div className="row">
-            <div>
-              <label>per_page</label>
-              <input value={perPage} onChange={(e) => setPerPage(e.target.value)} />
-            </div>
-            <div>
-              <label>available_seats</label>
-              <input value={availableSeats} onChange={(e) => setAvailableSeats(e.target.value)} />
-            </div>
-            <div>
-              <label>status</label>
-              <input value={status} onChange={(e) => setStatus(e.target.value)} />
-            </div>
-          </div>
-
-          <button type="submit">Search Dates</button>
-          <p className="small">API: <code>/api/svp/available-dates</code></p>
-        </form>
-      </div>
-
-      <div className="card">
-        <h3>2) Load Sessions</h3>
-        <div className="row">
+    <div className="app-shell">
+      <div className="app-panel app-panel-wide">
+        <div className="page-header">
           <div>
-            <label>city</label>
-            <input value={city} onChange={(e) => setCity(e.target.value)} />
+            <p className="eyebrow">Exam workflow</p>
+            <h1>Exam Search and Booking</h1>
+            <p className="page-copy">Search dates, choose a real test center, select readable language options, and submit the reservation flow in one place.</p>
           </div>
-          <div>
-            <label>exam_date</label>
-            <input value={examDate} onChange={(e) => setExamDate(e.target.value)} placeholder="YYYY-MM-DD" />
+          <div className="page-actions">
+            <Link className="text-link" href="/dashboard">Back to dashboard</Link>
           </div>
         </div>
-        <button onClick={loadExamSessions}>Load Sessions</button>
 
-        {sessionList.length > 0 && (
-          <div style={{ marginTop: 12 }}>
-                <label>Pick exam_session_id</label>
-                <select value={selectedSessionId} onChange={(e) => setSelectedSessionId(e.target.value)}>
-                  {sessionList.map((session) => (
-                    <option key={getSessionId(session)} value={getSessionId(session)}>
-                      {getSessionLabel(session)}
+        <div className="section-card">
+          <div className="section-title-row">
+            <h2>1. Search available dates</h2>
+            <p className="section-copy">Queries <code>/api/svp/available-dates</code> and fills the first valid date automatically.</p>
+          </div>
+          <form className="form-grid" onSubmit={searchAvailableDates}>
+            <div className="field-group">
+              <label>Category ID</label>
+              <input value={categoryId} onChange={(e) => setCategoryId(e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label>Start Date From</label>
+              <input value={startDateFrom} onChange={(e) => setStartDateFrom(e.target.value)} placeholder="YYYY-MM-DD" />
+            </div>
+            <div className="field-group">
+              <label>Per Page</label>
+              <input value={perPage} onChange={(e) => setPerPage(e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label>Available Seats</label>
+              <input value={availableSeats} onChange={(e) => setAvailableSeats(e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label>Status</label>
+              <input value={status} onChange={(e) => setStatus(e.target.value)} />
+            </div>
+            <div className="form-actions form-actions-full">
+              <button className="primary-button" type="submit">Search dates</button>
+            </div>
+          </form>
+        </div>
+
+        <div className="section-card">
+          <div className="section-title-row">
+            <h2>2. Load test centers</h2>
+            <p className="section-copy">Choose a city and date, then select a session with its visible <code>site_id</code>.</p>
+          </div>
+          <div className="form-grid">
+            <div className="field-group">
+              <label>City</label>
+              <input value={city} onChange={(e) => setCity(e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label>Exam Date</label>
+              <input value={examDate} onChange={(e) => setExamDate(e.target.value)} placeholder="YYYY-MM-DD" />
+            </div>
+            <div className="form-actions form-actions-full">
+              <button className="primary-button" type="button" onClick={loadExamSessions}>Load sessions</button>
+            </div>
+          </div>
+
+          {sessionList.length > 0 && (
+            <div className="field-group field-group-spaced">
+              <label>Test Center</label>
+              <select value={selectedSessionId} onChange={(e) => setSelectedSessionId(e.target.value)}>
+                {sessionList.map((session) => (
+                  <option key={getSessionId(session)} value={getSessionId(session)}>
+                    {getSessionLabel(session)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        <div className="section-card">
+          <div className="section-title-row">
+            <h2>3. Reservation details</h2>
+            <p className="section-copy">Language uses the readable option label, while the backend still receives the correct code.</p>
+          </div>
+
+          <div className="form-grid">
+            <div className="field-group">
+              <label>Methodology</label>
+              <select value={methodology} onChange={(e) => setMethodology(e.target.value)}>
+                <option value="in_person">in_person</option>
+                <option value="remote">remote</option>
+              </select>
+            </div>
+            <div className="field-group">
+              <label>Language</label>
+              {languageOptions.length > 0 ? (
+                <select value={languageCode} onChange={(e) => setLanguageCode(e.target.value)}>
+                  {languageOptions.map((option) => (
+                    <option key={option.code} value={option.code}>
+                      {option.english_name || option.language_code || option.code}
                     </option>
                   ))}
                 </select>
-              </div>
-        )}
-      </div>
-
-      <div className="card">
-        <h3>3) Booking</h3>
-        <div className="row">
-          <div>
-            <label>methodology</label>
-            <select value={methodology} onChange={(e) => setMethodology(e.target.value)}>
-              <option value="in_person">in_person</option>
-              <option value="remote">remote</option>
-            </select>
-          </div>
-          <div>
-            <label>Language</label>
-            {languageOptions.length > 0 ? (
-              <select value={languageCode} onChange={(e) => setLanguageCode(e.target.value)}>
-                {languageOptions.map((option) => (
-                  <option key={option.code} value={option.code}>
-                    {option.english_name || option.language_code || option.code}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input value={languageCode} onChange={(e) => setLanguageCode(e.target.value)} placeholder="Language code" />
-            )}
-          </div>
-        </div>
-
-        <div className="row">
-          <div>
-            <label>occupation_id</label>
-            <input value={occupationId} onChange={(e) => setOccupationId(e.target.value)} placeholder="ex: 2023" />
-            <button style={{ marginTop: 8 }} onClick={loadOccupations} type="button">
-              Load occupations helper
-            </button>
-            {occupationList.length > 0 && (
-              <select value={occupationId} onChange={(e) => setOccupationId(e.target.value)} style={{ marginTop: 8 }}>
-                {occupationList.map((occupation) => (
-                  <option key={occupation.id} value={occupation.id}>
-                    {occupation.id} {occupation.name ? `- ${occupation.name}` : ''}
-                  </option>
-                ))}
-              </select>
-            )}
+              ) : (
+                <input value={languageCode} onChange={(e) => setLanguageCode(e.target.value)} placeholder="Language code" />
+              )}
+            </div>
           </div>
 
-          <div>
-            <label>Selected exam_session_id</label>
-            <input value={selectedSessionId} readOnly />
-            <label>site_id</label>
-            <input value={siteId} readOnly />
-            <label>site_city</label>
-            <input value={siteCity} readOnly />
-            <p className="small">Temporary seat is optional, but recommended.</p>
+          <div className="form-grid">
+            <div className="field-group">
+              <label>Occupation</label>
+              <input value={occupationId} onChange={(e) => setOccupationId(e.target.value)} placeholder="Occupation ID" />
+              <button className="secondary-button inline-action" onClick={loadOccupations} type="button">Load occupations</button>
+              {occupationList.length > 0 && (
+                <select value={occupationId} onChange={(e) => setOccupationId(e.target.value)}>
+                  {occupationList.map((occupation) => (
+                    <option key={occupation.id} value={occupation.id}>
+                      {occupation.name ? `${occupation.name}` : `Occupation`} (#{occupation.id})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="field-group">
+              <label>Selected Session ID</label>
+              <input value={selectedSessionId} readOnly />
+              <label>Site ID</label>
+              <input value={siteId} readOnly />
+              <label>Site City</label>
+              <input value={siteCity} readOnly />
+            </div>
+          </div>
+
+          <div className="summary-strip">
+            <span>Available dates: <strong>{availableDatesRaw ? 'loaded' : 'not loaded'}</strong></span>
+            <span>Hold: <strong>{holdRaw ? 'loaded' : 'not loaded'}</strong></span>
+            <span>Reservation: <strong>{reservationRaw ? 'loaded' : 'not loaded'}</strong></span>
+          </div>
+
+          <div className="action-grid action-grid-compact">
+            <button className="secondary-button" onClick={createHold} type="button">Create temporary seat</button>
+            <button className="primary-button" onClick={bookReservation} type="button">Book reservation</button>
           </div>
         </div>
 
-        <div className="row" style={{ marginTop: 12 }}>
-          <button onClick={createHold} type="button">Create temporary seat</button>
-          <button onClick={bookReservation} type="button">Book reservation</button>
+        <div className="section-card">
+          <div className="section-title-row">
+            <h2>Output</h2>
+            <p className="section-copy">Latest payload returned by the backend or upstream proxy.</p>
+          </div>
+          <pre className="output-panel">{out || 'No requests run yet.'}</pre>
         </div>
-
-        <p className="small">
-          Last available dates payload: {availableDatesRaw ? 'loaded' : 'not loaded'}.
-          Last hold payload: {holdRaw ? 'loaded' : 'not loaded'}.
-          Last reservation payload: {reservationRaw ? 'loaded' : 'not loaded'}.
-        </p>
-      </div>
-
-      <div className="card">
-        <h3>Output</h3>
-        <pre>{out}</pre>
       </div>
     </div>
   );
