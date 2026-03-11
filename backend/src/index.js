@@ -4,10 +4,12 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
+import bcrypt from 'bcryptjs';
 import { prisma } from './lib/prisma.js';
 import { authRouter } from './routes/auth.js';
 import { svpRouter } from './routes/svp.js';
 import { meRouter } from './routes/me.js';
+import { adminRouter } from './routes/admin.js';
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -28,6 +30,34 @@ function validateEnv() {
 }
 
 validateEnv();
+
+async function ensureSeedAdmin() {
+  const login = process.env.ADMIN_SEED_LOGIN;
+  const password = process.env.ADMIN_SEED_PASSWORD;
+  if (!login || !password) return;
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  await prisma.user.upsert({
+    where: { login },
+    update: {
+      email: process.env.ADMIN_SEED_EMAIL || login,
+      fullName: process.env.ADMIN_SEED_NAME || 'Portal Admin',
+      role: 'ADMIN',
+      isApproved: true,
+      approvedAt: new Date(),
+      passwordHash,
+    },
+    create: {
+      login,
+      email: process.env.ADMIN_SEED_EMAIL || login,
+      fullName: process.env.ADMIN_SEED_NAME || 'Portal Admin',
+      role: 'ADMIN',
+      isApproved: true,
+      approvedAt: new Date(),
+      passwordHash,
+    },
+  });
+}
 
 const app = express();
 const appName = process.env.APP_NAME || 'SVP Backend API';
@@ -89,6 +119,7 @@ app.get('/', (_, res) => res.json({
 
 app.use('/api/auth', authRouter);
 app.use('/api', meRouter);
+app.use('/api/admin', adminRouter);
 app.use('/api/svp', svpRouter);
 
 // global error handler
@@ -102,4 +133,10 @@ app.use((err, req, res, next) => {
 
 const port = Number(process.env.PORT || 4000);
 const host = '0.0.0.0';
-app.listen(port, host, () => console.log(`${appName} listening on http://${host}:${port}`));
+ensureSeedAdmin()
+  .catch((error) => {
+    console.error('Failed to seed admin user', error);
+  })
+  .finally(() => {
+    app.listen(port, host, () => console.log(`${appName} listening on http://${host}:${port}`));
+  });

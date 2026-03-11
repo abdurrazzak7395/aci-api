@@ -13,6 +13,11 @@ model User {
   svpUserId Int?
   email     String?
   fullName  String?
+  phone     String?
+  passwordHash String?
+  role      String   @default("USER")
+  isApproved Boolean @default(false)
+  approvedAt DateTime?
   createdAt DateTime @default(now())
 
   sessions  Session[]

@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
+
 import { prisma } from '../lib/prisma.js';
-import { encryptString } from '../lib/crypto.js';
-import { randomToken } from '../lib/crypto.js';
+import { encryptString, randomToken } from '../lib/crypto.js';
 import { signAccess } from '../lib/jwt.js';
 import { svpRequest } from '../lib/svpClient.js';
 
@@ -42,49 +42,108 @@ function extractOtpPayload(data) {
     data?.expires_at,
   );
 
-  return {
-    token,
-    accessExpiresAt,
-    user,
-  };
+  return { token, accessExpiresAt, user };
 }
+
+const PortalLoginSchema = z.object({
+  login: z.string().min(3),
+  password: z.string().min(3),
+});
 
 const LoginSchema = z.object({
   login: z.string().min(3),
   password: z.string().min(3),
-  otpMethod: z.enum(['email','sms']).default('email'),
+  otpMethod: z.enum(['email', 'sms']).default('email'),
 });
 
 const OtpSchema = z.object({
   login: z.string().min(3),
   password: z.string().min(3),
   otpAttempt: z.string().min(4).max(10),
-  otpMethod: z.enum(['email','sms']).default('email'),
+  otpMethod: z.enum(['email', 'sms']).default('email'),
+});
+
+async function assertApprovedPortalUser(login, password) {
+  const user = await prisma.user.findUnique({ where: { login } });
+  if (!user || !user.passwordHash) {
+    const err = new Error('No approved portal account found for this user');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (!user.isApproved) {
+    const err = new Error('Your account is not approved yet');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const ok = await bcrypt.compare(password, user.passwordHash);
+  if (!ok) {
+    const err = new Error('Invalid username or password');
+    err.statusCode = 401;
+    throw err;
+  }
+
+  return user;
+}
+
+router.post('/portal-login', async (req, res, next) => {
+  try {
+    const { login, password } = PortalLoginSchema.parse(req.body);
+    const user = await assertApprovedPortalUser(login, password);
+
+    const accessToken = signAccess({
+      sub: user.id,
+      login: user.login,
+      role: user.role,
+      approved: user.isApproved,
+      portalOnly: true,
+    });
+
+    res.json({
+      accessToken,
+      nextStep: user.role === 'ADMIN' ? 'ADMIN' : 'SVP_LOGIN',
+      user: {
+        id: user.id,
+        login: user.login,
+        email: user.email,
+        fullName: user.fullName,
+        phone: user.phone,
+        role: user.role,
+        isApproved: user.isApproved,
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
 });
 
 router.post('/login', async (req, res, next) => {
   try {
     const { login, password, otpMethod } = LoginSchema.parse(req.body);
-    const feApp = process.env.SVP_FE_APP || 'legislator';
+    await assertApprovedPortalUser(login, password);
 
-    // trigger OTP email/sms
+    const feApp = process.env.SVP_FE_APP || 'legislator';
     await svpRequest('/api/v1/sessions/login', {
       method: 'POST',
-      body: { user: { login, password, otp_method: otpMethod, fe_app: feApp } }
+      body: { user: { login, password, otp_method: otpMethod, fe_app: feApp } },
     });
 
     res.json({ status: 'OTP_SENT' });
-  } catch (e) { next(e); }
+  } catch (e) {
+    next(e);
+  }
 });
 
 router.post('/otp-verify', async (req, res, next) => {
   try {
     const { login, password, otpAttempt, otpMethod } = OtpSchema.parse(req.body);
+    const approvedUser = await assertApprovedPortalUser(login, password);
     const feApp = process.env.SVP_FE_APP || 'legislator';
 
     const data = await svpRequest('/api/v1/sessions/otp', {
       method: 'POST',
-      body: { user: { login, password, otp_attempt: otpAttempt, fe_app: feApp, otp_method: otpMethod } }
+      body: { user: { login, password, otp_attempt: otpAttempt, fe_app: feApp, otp_method: otpMethod } },
     });
 
     const otpPayload = extractOtpPayload(data);
@@ -98,21 +157,39 @@ router.post('/otp-verify', async (req, res, next) => {
       throw err;
     }
 
-    const svpUserId = otpPayload.user?.id ?? null;
-    const email = otpPayload.user?.email ?? null;
-    const fullName = otpPayload.user?.full_name ?? otpPayload.user?.fullName ?? null;
+    const svpUserId = otpPayload.user?.id ?? approvedUser.svpUserId ?? null;
+    const email = otpPayload.user?.email ?? approvedUser.email ?? null;
+    const fullName = otpPayload.user?.full_name ?? otpPayload.user?.fullName ?? approvedUser.fullName ?? null;
 
     const user = await prisma.user.upsert({
       where: { login },
-      update: { svpUserId, email, fullName },
-      create: { login, svpUserId, email, fullName },
+      update: {
+        svpUserId,
+        email,
+        fullName,
+        phone: approvedUser.phone,
+        role: approvedUser.role,
+        isApproved: approvedUser.isApproved,
+        approvedAt: approvedUser.approvedAt,
+        passwordHash: approvedUser.passwordHash,
+      },
+      create: {
+        login,
+        svpUserId,
+        email,
+        fullName,
+        phone: approvedUser.phone,
+        role: approvedUser.role,
+        isApproved: approvedUser.isApproved,
+        approvedAt: approvedUser.approvedAt,
+        passwordHash: approvedUser.passwordHash,
+      },
     });
 
-    // Create refresh token (opaque) stored hashed, set in HttpOnly cookie
     const refreshRaw = randomToken(32);
     const refreshHash = await bcrypt.hash(refreshRaw, 10);
     const refreshDays = Number(process.env.REFRESH_TOKEN_TTL_DAYS || 14);
-    const refreshExpiresAt = new Date(Date.now() + refreshDays * 24*60*60*1000);
+    const refreshExpiresAt = new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000);
 
     const session = await prisma.session.create({
       data: {
@@ -121,29 +198,51 @@ router.post('/otp-verify', async (req, res, next) => {
         refreshExpiresAt,
         svpAccessEnc: encryptString(svpToken),
         svpAccessExp: svpExp,
-      }
+      },
     });
 
-    // Your access JWT for your app
-    const accessToken = signAccess({ sub: user.id, login: user.login, sid: session.id });
+    const accessToken = signAccess({
+      sub: user.id,
+      login: user.login,
+      sid: session.id,
+      role: user.role,
+      approved: user.isApproved,
+    });
 
-    // Cookies (refresh token + session id)
     const secure = String(process.env.COOKIE_SECURE) === 'true';
-    const sameSite = (process.env.COOKIE_SAMESITE || 'lax');
+    const sameSite = process.env.COOKIE_SAMESITE || 'lax';
 
     res.cookie('svp_rt', refreshRaw, {
-      httpOnly: true, secure, sameSite,
+      httpOnly: true,
+      secure,
+      sameSite,
       path: '/api/auth/refresh',
-      maxAge: refreshDays * 24*60*60*1000,
+      maxAge: refreshDays * 24 * 60 * 60 * 1000,
     });
     res.cookie('svp_sid', session.id, {
-      httpOnly: true, secure, sameSite,
+      httpOnly: true,
+      secure,
+      sameSite,
       path: '/api/auth/refresh',
-      maxAge: refreshDays * 24*60*60*1000,
+      maxAge: refreshDays * 24 * 60 * 60 * 1000,
     });
 
-    res.json({ accessToken, user: { id: user.id, login: user.login, svpUserId, email, fullName } });
-  } catch (e) { next(e); }
+    res.json({
+      accessToken,
+      user: {
+        id: user.id,
+        login: user.login,
+        svpUserId,
+        email,
+        fullName,
+        phone: user.phone,
+        role: user.role,
+        isApproved: user.isApproved,
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
 });
 
 router.post('/refresh', async (req, res, next) => {
@@ -159,21 +258,31 @@ router.post('/refresh', async (req, res, next) => {
     const ok = await bcrypt.compare(String(rt), session.refreshTokenHash);
     if (!ok) return res.status(401).json({ message: 'Invalid refresh token' });
 
-    const accessToken = signAccess({ sub: session.user.id, login: session.user.login, sid: session.id });
+    const accessToken = signAccess({
+      sub: session.user.id,
+      login: session.user.login,
+      sid: session.id,
+      role: session.user.role,
+      approved: session.user.isApproved,
+    });
     res.json({ accessToken });
-  } catch (e) { next(e); }
+  } catch (e) {
+    next(e);
+  }
 });
 
 router.post('/logout', async (req, res, next) => {
   try {
     const sid = req.cookies?.svp_sid;
     if (sid) {
-      await prisma.session.update({ where: { id: String(sid) }, data: { revokedAt: new Date() } }).catch(()=>{});
+      await prisma.session.update({ where: { id: String(sid) }, data: { revokedAt: new Date() } }).catch(() => {});
     }
     res.clearCookie('svp_rt', { path: '/api/auth/refresh' });
     res.clearCookie('svp_sid', { path: '/api/auth/refresh' });
     res.json({ ok: true });
-  } catch (e) { next(e); }
+  } catch (e) {
+    next(e);
+  }
 });
 
 export const authRouter = router;

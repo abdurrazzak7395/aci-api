@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { api } from '../../lib/api';
 
@@ -8,6 +8,20 @@ export default function Login() {
   const [otpMethod, setOtpMethod] = useState('email');
   const [msg, setMsg] = useState('');
   const router = useRouter();
+
+  useEffect(() => {
+    const portalToken = typeof window !== 'undefined' ? sessionStorage.getItem('portalAccessToken') : '';
+    const portalLogin = typeof window !== 'undefined' ? sessionStorage.getItem('portal_login') : '';
+    const portalPassword = typeof window !== 'undefined' ? sessionStorage.getItem('portal_password') : '';
+
+    if (!portalToken) {
+      router.replace('/auth/access');
+      return;
+    }
+
+    setLogin(String(portalLogin || ''));
+    setPassword(String(portalPassword || ''));
+  }, [router]);
 
   async function submit(e) {
     e.preventDefault();
@@ -31,7 +45,7 @@ export default function Login() {
       <div className="auth-panel">
         <div className="auth-heading">
           <h1>Welcome back</h1>
-          <p>Sign in to continue with your SVP account and request OTP verification.</p>
+          <p>Step 2: continue with your approved SVP account and request OTP verification.</p>
         </div>
 
         <form className="auth-form" onSubmit={submit}>
