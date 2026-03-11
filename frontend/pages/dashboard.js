@@ -71,10 +71,6 @@ export default function Dashboard() {
             <button className="secondary-button" onClick={() => call('/api/me')}>Load profile</button>
             <button className="secondary-button" onClick={() => call('/api/svp/permissions')}>Permissions</button>
             <button className="secondary-button" onClick={() => call('/api/svp/occupations')}>Occupations</button>
-            <button className="secondary-button" onClick={() => call('/api/svp/exam-constraints')}>Exam constraints</button>
-            <button className="secondary-button" onClick={() => call('/api/svp/certificate-price')}>Certificate price</button>
-            <button className="secondary-button" onClick={() => call('/api/svp/feature-flags')}>Feature flags</button>
-            <button className="secondary-button" onClick={() => call('/api/auth/refresh', { method: 'POST' })}>Force refresh</button>
           </div>
         </div>
 
