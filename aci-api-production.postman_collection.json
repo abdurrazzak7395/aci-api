@@ -1,0 +1,705 @@
+{
+  "info": {
+    "_postman_id": "8d20b8a8-6d0f-47ff-8bdb-0f5b5db5f001",
+    "name": "ACI API Production",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Production-ready Postman collection for the live Railway backend and Vercel frontend setup."
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://aci-api-production.up.railway.app"
+    },
+    {
+      "key": "login",
+      "value": "mdroni@yopmail.com"
+    },
+    {
+      "key": "password",
+      "value": "MDRONI@ttc26"
+    },
+    {
+      "key": "otpMethod",
+      "value": "email"
+    },
+    {
+      "key": "otpAttempt",
+      "value": ""
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "svpUserId",
+      "value": ""
+    },
+    {
+      "key": "examSessionId",
+      "value": ""
+    },
+    {
+      "key": "paymentId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Verify the live Railway backend is healthy."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /api/auth/login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"login\": \"{{login}}\",\n  \"password\": \"{{password}}\",\n  \"otpMethod\": \"{{otpMethod}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Triggers OTP delivery using the SVP login flow through your backend."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/auth/otp-verify",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.accessToken) pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "  if (json.user && json.user.svpUserId) pm.collectionVariables.set('svpUserId', String(json.user.svpUserId));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"login\": \"{{login}}\",\n  \"password\": \"{{password}}\",\n  \"otpAttempt\": \"{{otpAttempt}}\",\n  \"otpMethod\": \"{{otpMethod}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/otp-verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "otp-verify"
+              ]
+            },
+            "description": "Verifies the OTP. On success Postman stores accessToken and svpUserId as collection variables. Refresh cookies are also set by the backend."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/auth/refresh",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.accessToken) pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Uses the HttpOnly cookies set during OTP verify to issue a new access token."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/auth/logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Revokes the current session and clears refresh cookies."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "App",
+      "item": [
+        {
+          "name": "GET /api/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "SVP Proxy",
+      "item": [
+        {
+          "name": "GET /api/svp/permissions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/permissions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "permissions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/svp/occupations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/occupations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "occupations"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/svp/exam-constraints",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/exam-constraints",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "exam-constraints"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/svp/available-dates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/available-dates?per_page=1000&category_id=56&start_at_date_from=2026-03-15&available_seats=greater_than::0&status=scheduled",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "available-dates"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "1000"
+                },
+                {
+                  "key": "category_id",
+                  "value": "56"
+                },
+                {
+                  "key": "start_at_date_from",
+                  "value": "2026-03-15"
+                },
+                {
+                  "key": "available_seats",
+                  "value": "greater_than::0"
+                },
+                {
+                  "key": "status",
+                  "value": "scheduled"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/svp/exam-sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/exam-sessions?category_id=56&city=Mymensingh&exam_date=2026-03-15",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "exam-sessions"
+              ],
+              "query": [
+                {
+                  "key": "category_id",
+                  "value": "56"
+                },
+                {
+                  "key": "city",
+                  "value": "Mymensingh"
+                },
+                {
+                  "key": "exam_date",
+                  "value": "2026-03-15"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/svp/exam-session/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/exam-session/{{examSessionId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "exam-session",
+                "{{examSessionId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/svp/temporary-seats",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"exam_session_id\": {{examSessionId}},\n  \"quantity\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/svp/temporary-seats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "temporary-seats"
+              ]
+            },
+            "description": "Adjust the body to match the exact payload required by the upstream SVP endpoint."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/svp/exam-reservations",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"exam_session_id\": {{examSessionId}},\n  \"seat_count\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/svp/exam-reservations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "exam-reservations"
+              ]
+            },
+            "description": "Adjust the body to match the exact payload required by the upstream SVP endpoint."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/svp/certificate-price",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/certificate-price",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "certificate-price"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/svp/payments-validate-pending",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/payments-validate-pending",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "payments-validate-pending"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/svp/payments",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 0,\n  \"description\": \"sample payment payload\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/svp/payments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "payments"
+              ]
+            },
+            "description": "Adjust the body to match the exact payload required by the upstream SVP endpoint."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/svp/payments/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/payments/{{paymentId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "payments",
+                "{{paymentId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /api/svp/payments/:id",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"pending\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/svp/payments/{{paymentId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "payments",
+                "{{paymentId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/svp/feature-flags",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/feature-flags",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "feature-flags"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/svp/notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/notifications",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "notifications"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/svp/user-balance/:svpUserId",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/user-balance/{{svpUserId}}?methodology_type=in_person&occupation_id=900",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "svp",
+                "user-balance",
+                "{{svpUserId}}"
+              ],
+              "query": [
+                {
+                  "key": "methodology_type",
+                  "value": "in_person"
+                },
+                {
+                  "key": "occupation_id",
+                  "value": "900"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
