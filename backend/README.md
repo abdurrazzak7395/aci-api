@@ -7,6 +7,11 @@
 - Stores SVP access token encrypted in DB
 - Exposes proxy endpoints under `/api/svp/*` (permissions, occupations, exams, booking, etc.)
 
+Architecture:
+- frontend never calls `https://svp-international-api.pacc.sa` directly
+- frontend calls your backend
+- backend calls `https://svp-international-api.pacc.sa` using `SVP_BASE_URL`
+
 ## Setup
 1) Copy env:
    - `cp .env.example .env`
@@ -38,7 +43,7 @@ Use these env values in `backend/.env`:
 - `NODE_ENV=production`
 - `APP_NAME=SVP Backend API`
 - `PORT=4000` locally only. On Railway, do not hardcode port handling beyond keeping the default; Railway injects `PORT`.
-- `CORS_ORIGINS=https://your-frontend-domain`
+- `CORS_ORIGINS=https://svp-book.vercel.app,https://svp-book-abdur-razzak-s-projects.vercel.app`
 - `COOKIE_SECURE=true`
 - `COOKIE_SAMESITE=none`
 - `DATABASE_URL=...`
@@ -70,7 +75,7 @@ Railway-provided runtime variables are automatic. You should not add them manual
 Required backend variables you must set manually in Railway:
 - `NODE_ENV=production`
 - `APP_NAME=SVP Backend API`
-- `CORS_ORIGINS=https://your-frontend-domain.vercel.app`
+- `CORS_ORIGINS=https://svp-book.vercel.app,https://svp-book-abdur-razzak-s-projects.vercel.app`
 - `JWT_ACCESS_SECRET=<strong-random-secret>`
 - `JWT_REFRESH_SECRET=<strong-random-secret>`
 - `ACCESS_TOKEN_TTL_SECONDS=900`
@@ -89,6 +94,11 @@ Database URL rule:
 
 Expected live health URL:
 - `https://aci-api-production.up.railway.app/health`
+
+Expected production flow:
+- `https://svp-book.vercel.app` -> frontend
+- `https://aci-api-production.up.railway.app` -> backend
+- `https://svp-international-api.pacc.sa` -> upstream API used by backend only
 
 ## API
 - POST /api/auth/login

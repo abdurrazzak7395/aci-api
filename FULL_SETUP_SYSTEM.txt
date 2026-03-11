@@ -19,6 +19,13 @@ This project has 2 parts:
    - Runs locally on http://localhost:3000
    - Live deploy target: Vercel
 
+Live request architecture:
+- frontend URL: https://svp-book.vercel.app
+- backend URL: https://aci-api-production.up.railway.app
+- upstream SVP API: https://svp-international-api.pacc.sa
+- frontend should call the backend only
+- backend auth/session layer should call the real SVP API
+
 Recommended runtime:
 - Node.js 20
 - npm 10+
@@ -240,7 +247,7 @@ Railway setup steps:
 
 NODE_ENV=production
 APP_NAME=SVP Backend API
-CORS_ORIGINS=https://svp-book.vercel.app
+CORS_ORIGINS=https://svp-book.vercel.app,https://svp-book-abdur-razzak-s-projects.vercel.app
 JWT_ACCESS_SECRET=your_strong_access_secret
 JWT_REFRESH_SECRET=your_strong_refresh_secret
 ACCESS_TOKEN_TTL_SECONDS=900
@@ -316,6 +323,11 @@ After frontend gets its real Vercel domain:
 4. Redeploy backend if needed.
 
 This step is required so browser requests from frontend are allowed by backend CORS.
+
+Important live rule:
+- do not configure the frontend to call https://svp-international-api.pacc.sa directly
+- configure the frontend to call https://aci-api-production.up.railway.app
+- the backend then calls https://svp-international-api.pacc.sa using SVP_BASE_URL
 
 
 ==================================================
@@ -425,7 +437,7 @@ Backend on Railway:
 - railway.toml detected
 - start command = bash start.sh
 - health check path = /health
-- CORS_ORIGINS=https://svp-book.vercel.app
+- CORS_ORIGINS=https://svp-book.vercel.app,https://svp-book-abdur-razzak-s-projects.vercel.app
 - all required env vars added
 - Railway database connected
 

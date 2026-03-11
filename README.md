@@ -3,6 +3,15 @@
 This project uses the SVP API login + OTP flow, then issues your own access JWT + refresh cookie session,
 and proxies SVP endpoints through your backend.
 
+Live architecture:
+- frontend: `https://svp-book.vercel.app`
+- backend: `https://aci-api-production.up.railway.app`
+- upstream SVP API: `https://svp-international-api.pacc.sa`
+
+Important:
+- the frontend should call your backend, not the upstream SVP API directly
+- your backend handles auth/session logic, stores the SVP token, and then calls `https://svp-international-api.pacc.sa`
+
 ## Requirements
 - Node.js 18+ (recommended Node 20)
 - Docker (for Postgres)
@@ -53,7 +62,6 @@ Backend on Railway:
 3. Add backend env vars in Railway:
    - `NODE_ENV=production`
    - `APP_NAME=SVP Backend API`
-   - `PORT=4000` (Railway can also inject its own port)
    - `CORS_ORIGINS=https://svp-book.vercel.app,https://svp-book-abdur-razzak-s-projects.vercel.app`
    - `JWT_ACCESS_SECRET=...`
    - `JWT_REFRESH_SECRET=...`
@@ -67,7 +75,7 @@ Backend on Railway:
    - `SVP_FE_APP=legislator`
    - `SESSION_ENC_KEY_BASE64=...`
 4. Deploy and test:
-   - `GET https://your-railway-backend-url/health`
+   - `GET https://aci-api-production.up.railway.app/health`
 
 Frontend on Vercel:
 1. Import this repo into Vercel and set **Root Directory** to `frontend`.
@@ -75,6 +83,11 @@ Frontend on Vercel:
 3. Add env var in Vercel:
    - `NEXT_PUBLIC_BACKEND_URL=https://aci-api-production.up.railway.app`
 4. Deploy and open your live website URL from Vercel.
+
+Production flow:
+- browser -> `https://svp-book.vercel.app`
+- frontend API calls -> `https://aci-api-production.up.railway.app`
+- backend proxy calls -> `https://svp-international-api.pacc.sa`
 
 ### Make GitHub Repo Public
 1. Open repo settings: `https://github.com/abdurrazzak7395-rgb/pcc-app/settings`
