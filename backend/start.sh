@@ -28,4 +28,14 @@ else
 fi
 
 echo "Launching API..."
-npm start
+if [ -f "./src/index.js" ]; then
+  exec node ./src/index.js
+fi
+
+if [ -f "./backend/src/index.js" ]; then
+  exec node ./backend/src/index.js
+fi
+
+echo "ERROR: Cannot find src/index.js from current working directory."
+echo "Current dir: $(pwd)"
+exit 1
