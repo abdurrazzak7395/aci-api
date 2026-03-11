@@ -422,6 +422,33 @@ export default function BookingPage() {
           </button>
         </div>
 
+        {availableDates.length ? (
+          <div className="detail-box">
+            <h2>Available dates</h2>
+            <div className="date-grid">
+              {availableDates.map((item) => {
+                const active = item === availableDate;
+                const label = new Date(item).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: '2-digit',
+                  year: 'numeric',
+                });
+
+                return (
+                  <button
+                    key={item}
+                    className={`date-card${active ? ' date-card--active' : ''}`}
+                    type="button"
+                    onClick={() => setAvailableDate(item)}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
         {sessions.length ? (
           <>
             <label className="field field-wide">
@@ -584,6 +611,26 @@ export default function BookingPage() {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 14px;
+        }
+        .date-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+          gap: 12px;
+          margin-top: 14px;
+        }
+        .date-card {
+          min-height: 48px;
+          border: 1px solid #44506f;
+          border-radius: 12px;
+          background: #f7f9fd;
+          color: #182238;
+          cursor: pointer;
+          font-weight: 700;
+        }
+        .date-card--active {
+          background: #87c2c7;
+          border-color: #87c2c7;
+          color: #fff;
         }
         .detail-grid div {
           display: flex;
