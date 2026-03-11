@@ -9,6 +9,46 @@ import { svpRequest } from '../lib/svpClient.js';
 
 const router = Router();
 
+function pickFirst(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return null;
+}
+
+function extractOtpPayload(data) {
+  const root = data?.data && typeof data.data === 'object' ? data.data : data;
+  const user = root?.user || data?.user || null;
+
+  const token = pickFirst(
+    root?.access_payload?.access,
+    data?.access_payload?.access,
+    root?.access_payload?.token,
+    data?.access_payload?.token,
+    root?.accessToken,
+    data?.accessToken,
+    root?.access_token,
+    data?.access_token,
+    root?.token,
+    data?.token,
+  );
+
+  const accessExpiresAt = pickFirst(
+    root?.access_payload?.access_expires_at,
+    data?.access_payload?.access_expires_at,
+    root?.access_expires_at,
+    data?.access_expires_at,
+    root?.expires_at,
+    data?.expires_at,
+  );
+
+  return {
+    token,
+    accessExpiresAt,
+    user,
+  };
+}
+
 const LoginSchema = z.object({
   login: z.string().min(3),
   password: z.string().min(3),
@@ -47,20 +87,20 @@ router.post('/otp-verify', async (req, res, next) => {
       body: { user: { login, password, otp_attempt: otpAttempt, fe_app: feApp, otp_method: otpMethod } }
     });
 
-    // Token is: access_payload.access (confirmed in the uploaded Postman response)
-    const svpToken = data?.access_payload?.access;
-    const svpExp = data?.access_payload?.access_expires_at ? new Date(data.access_payload.access_expires_at) : null;
+    const otpPayload = extractOtpPayload(data);
+    const svpToken = otpPayload.token;
+    const svpExp = otpPayload.accessExpiresAt ? new Date(otpPayload.accessExpiresAt) : null;
 
     if (!svpToken) {
-      const err = new Error('SVP token not found at access_payload.access');
-      err.statusCode = 500;
+      const err = new Error('SVP OTP verify succeeded but no access token was returned');
+      err.statusCode = 502;
       err.details = data;
       throw err;
     }
 
-    const svpUserId = data?.user?.id ?? null;
-    const email = data?.user?.email ?? null;
-    const fullName = data?.user?.full_name ?? null;
+    const svpUserId = otpPayload.user?.id ?? null;
+    const email = otpPayload.user?.email ?? null;
+    const fullName = otpPayload.user?.full_name ?? otpPayload.user?.fullName ?? null;
 
     const user = await prisma.user.upsert({
       where: { login },
