@@ -13,6 +13,7 @@ export default function DashboardPage() {
   const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -27,11 +28,9 @@ export default function DashboardPage() {
         setMe(getProfile(data));
       } catch (err) {
         if (!active) return;
-        setError(err?.message || 'Failed to load profile');
+        setError(err?.message || 'Request failed');
       } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       }
     }
 
@@ -42,38 +41,67 @@ export default function DashboardPage() {
     };
   }, []);
 
+  async function handleLogout() {
+    setLoggingOut(true);
+    setError('');
+
+    try {
+      await api('/api/auth/logout', { method: 'POST' });
+    } catch (err) {
+      setError(err?.message || 'Logout failed');
+    } finally {
+      setLoggingOut(false);
+      router.push('/auth/login');
+    }
+  }
+
   return (
-    <div className="auth-shell dashboard-shell">
-      <div className="auth-card app-card">
-        <div className="app-card__header">
+    <div className="dashboard-shell">
+      <div className="dashboard-card">
+        <div className="toolbar">
+          <div className="badge">Dashboard</div>
+          <div className="toolbar-actions">
+            <Link className="nav-btn nav-btn--dark" href="/exam/reservations">
+              My bookings
+            </Link>
+            <button className="nav-btn nav-btn--accent" type="button" onClick={handleLogout} disabled={loggingOut}>
+              {loggingOut ? 'Logging out...' : 'Logout'}
+            </button>
+          </div>
+        </div>
+
+        <div className="hero">
           <div>
-            <p className="eyebrow">Dashboard</p>
             <h1>Welcome back</h1>
-            <p className="muted">
+            <p className="subtitle">
               {loading
-                ? 'Loading account details...'
+                ? 'Loading your account...'
                 : me?.name || me?.email || me?.login || 'Manage your bookings and reservations'}
             </p>
           </div>
-          <button className="secondary-btn" type="button" onClick={() => router.push('/exam/reservations')}>
-            My bookings
-          </button>
+          <div className="hero-chip">
+            <span className="hero-chip__label">Portal</span>
+            <strong>Booking Center</strong>
+          </div>
         </div>
 
         {error ? <div className="status-card status-card--error">{error}</div> : null}
 
-        <div className="dashboard-grid">
+        <div className="action-grid">
           <Link className="action-card action-card--primary" href="/exam/booking">
-            <span className="action-card__title">Create new booking</span>
-            <span className="action-card__desc">Open the booking page directly and search new test sessions.</span>
+            <span className="action-icon">+</span>
+            <span className="action-title">Create new booking</span>
+            <span className="action-desc">Open the booking page directly and search new test sessions.</span>
           </Link>
 
-          <Link className="action-card" href="/exam/reservations">
-            <span className="action-card__title">My exam reservations</span>
-            <span className="action-card__desc">See already booked exams and start reschedule from one page.</span>
+          <Link className="action-card action-card--secondary" href="/exam/reservations">
+            <span className="action-icon">#</span>
+            <span className="action-title">My exam reservations</span>
+            <span className="action-desc">See booked exams and start reschedule from one page.</span>
           </Link>
         </div>
       </div>
+
       <style jsx>{`
         .dashboard-shell {
           min-height: 100vh;
@@ -81,95 +109,178 @@ export default function DashboardPage() {
           align-items: center;
           justify-content: center;
           padding: 24px;
-          background: #efefef;
+          background:
+            radial-gradient(circle at top left, rgba(127, 193, 197, 0.35), transparent 32%),
+            linear-gradient(135deg, #edf2f6 0%, #e4ecf3 45%, #f7f0e9 100%);
         }
-        .app-card {
-          width: min(760px, 100%);
+        .dashboard-card {
+          width: min(920px, 100%);
           padding: 32px;
-          border-radius: 20px;
-          background: #ffffff;
-          box-shadow: 0 20px 45px rgba(10, 31, 68, 0.08);
+          border-radius: 28px;
+          background: rgba(255, 255, 255, 0.92);
+          box-shadow: 0 26px 70px rgba(33, 53, 85, 0.14);
+          border: 1px solid rgba(255, 255, 255, 0.7);
+          backdrop-filter: blur(10px);
         }
-        .app-card__header {
+        .toolbar {
           display: flex;
-          align-items: flex-start;
+          align-items: center;
           justify-content: space-between;
           gap: 16px;
+          margin-bottom: 28px;
+        }
+        .badge {
+          display: inline-flex;
+          align-items: center;
+          min-height: 34px;
+          padding: 0 14px;
+          border-radius: 999px;
+          background: #e1f0ef;
+          color: #39656b;
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+        }
+        .toolbar-actions {
+          display: flex;
+          gap: 12px;
+        }
+        .nav-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 44px;
+          padding: 0 18px;
+          border: 0;
+          border-radius: 14px;
+          text-decoration: none;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .nav-btn--dark {
+          background: #0f1b3d;
+          color: #fff;
+        }
+        .nav-btn--accent {
+          background: linear-gradient(135deg, #ff8f70 0%, #f56d91 100%);
+          color: #fff;
+          box-shadow: 0 12px 24px rgba(245, 109, 145, 0.28);
+        }
+        .hero {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 24px;
           margin-bottom: 24px;
         }
-        .eyebrow {
-          margin: 0 0 8px;
-          font-size: 12px;
-          font-weight: 700;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: #5a7a7d;
-        }
         h1 {
-          margin: 0 0 8px;
-          font-size: 36px;
-          line-height: 1.1;
-          color: #101728;
+          margin: 0 0 12px;
+          font-size: 54px;
+          line-height: 1;
+          color: #0f1b3d;
         }
-        .muted {
+        .subtitle {
           margin: 0;
-          color: #5f6777;
+          max-width: 520px;
+          font-size: 20px;
+          line-height: 1.5;
+          color: #586279;
         }
-        .dashboard-grid {
+        .hero-chip {
+          min-width: 200px;
+          padding: 18px 20px;
+          border-radius: 22px;
+          background: linear-gradient(145deg, #10305d 0%, #1d5f71 100%);
+          color: #fff;
+          box-shadow: 0 18px 34px rgba(25, 71, 104, 0.22);
+        }
+        .hero-chip__label {
+          display: block;
+          margin-bottom: 6px;
+          font-size: 12px;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: rgba(255, 255, 255, 0.72);
+        }
+        .status-card {
+          margin-bottom: 20px;
+          padding: 16px 18px;
+          border-radius: 16px;
+          font-weight: 600;
+        }
+        .status-card--error {
+          background: linear-gradient(135deg, #fff0ef 0%, #ffe6e5 100%);
+          color: #b34034;
+          border: 1px solid #ffd2cf;
+        }
+        .action-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-          gap: 16px;
+          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+          gap: 18px;
         }
         .action-card {
           display: flex;
           flex-direction: column;
-          gap: 10px;
-          padding: 20px;
-          border-radius: 16px;
+          gap: 12px;
+          min-height: 190px;
+          padding: 24px;
+          border-radius: 24px;
           text-decoration: none;
-          background: #f6f7f9;
-          color: #101728;
-          border: 1px solid #dde2ea;
+          transition: transform 0.18s ease, box-shadow 0.18s ease;
+        }
+        .action-card:hover {
+          transform: translateY(-4px);
         }
         .action-card--primary {
-          background: #deeff0;
-          border-color: #b8d8da;
+          background: linear-gradient(145deg, #e6f7f2 0%, #d6ecef 100%);
+          box-shadow: 0 16px 36px rgba(103, 157, 154, 0.16);
         }
-        .action-card__title {
-          font-size: 18px;
-          font-weight: 700;
+        .action-card--secondary {
+          background: linear-gradient(145deg, #eef1ff 0%, #f3e8ff 100%);
+          box-shadow: 0 16px 36px rgba(117, 97, 181, 0.14);
         }
-        .action-card__desc {
-          color: #5f6777;
-          line-height: 1.5;
+        .action-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 52px;
+          height: 52px;
+          border-radius: 16px;
+          background: rgba(15, 27, 61, 0.08);
+          color: #0f1b3d;
+          font-size: 28px;
+          font-weight: 800;
         }
-        .secondary-btn {
-          min-width: 130px;
-          border: 0;
-          border-radius: 12px;
-          padding: 12px 18px;
-          background: #101728;
-          color: #fff;
-          cursor: pointer;
+        .action-title {
+          font-size: 28px;
+          line-height: 1.1;
+          font-weight: 800;
+          color: #0f1b3d;
         }
-        .status-card {
-          margin-bottom: 16px;
-          padding: 14px 16px;
-          border-radius: 14px;
+        .action-desc {
+          font-size: 17px;
+          line-height: 1.6;
+          color: #586279;
         }
-        .status-card--error {
-          background: #fff1f1;
-          color: #9d2020;
-        }
-        @media (max-width: 640px) {
-          .app-card {
+        @media (max-width: 720px) {
+          .dashboard-card {
             padding: 24px;
           }
-          .app-card__header {
+          .toolbar,
+          .toolbar-actions,
+          .hero {
             flex-direction: column;
+            align-items: stretch;
           }
           h1 {
-            font-size: 30px;
+            font-size: 40px;
+          }
+          .subtitle {
+            font-size: 18px;
+          }
+          .hero-chip {
+            min-width: 0;
           }
         }
       `}</style>
