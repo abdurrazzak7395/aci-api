@@ -10,8 +10,13 @@ if [ -x "./node_modules/.bin/prisma" ]; then
   echo "Generating Prisma client..."
   ./node_modules/.bin/prisma generate
 
-  echo "Running Prisma migrations (deploy)..."
-  ./node_modules/.bin/prisma migrate deploy
+  if [ -d "./prisma/migrations" ]; then
+    echo "Running Prisma migrations (deploy)..."
+    ./node_modules/.bin/prisma migrate deploy
+  else
+    echo "No prisma/migrations directory found. Running prisma db push..."
+    ./node_modules/.bin/prisma db push
+  fi
 else
   echo "Prisma CLI not found in node_modules. Skipping generate/migrate."
 fi
