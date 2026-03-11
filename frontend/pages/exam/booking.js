@@ -1,492 +1,621 @@
-import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
+import { useEffect, useMemo, useState } from 'react';
+
 import { api } from '../../lib/api';
 
-function pickArray(json) {
-  if (Array.isArray(json)) return json;
-  if (Array.isArray(json?.occupations)) return json.occupations;
-  if (Array.isArray(json?.exam_sessions)) return json.exam_sessions;
-  if (Array.isArray(json?.available_dates)) return json.available_dates;
-  if (Array.isArray(json?.data?.occupations)) return json.data.occupations;
-  if (Array.isArray(json?.data?.exam_sessions)) return json.data.exam_sessions;
-  if (Array.isArray(json?.data?.available_dates)) return json.data.available_dates;
-  if (Array.isArray(json?.data)) return json.data;
-  if (Array.isArray(json?.items)) return json.items;
-  if (Array.isArray(json?.results)) return json.results;
-  return null;
+function pickArray(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.data?.items)) return payload.data.items;
+  if (Array.isArray(payload?.occupations)) return payload.occupations;
+  if (Array.isArray(payload?.data?.occupations)) return payload.data.occupations;
+  if (Array.isArray(payload?.exam_sessions)) return payload.exam_sessions;
+  if (Array.isArray(payload?.data?.exam_sessions)) return payload.data.exam_sessions;
+  if (Array.isArray(payload?.available_dates)) return payload.available_dates;
+  if (Array.isArray(payload?.data?.available_dates)) return payload.data.available_dates;
+  if (Array.isArray(payload?.prometric_codes)) return payload.prometric_codes;
+  if (Array.isArray(payload?.data?.prometric_codes)) return payload.data.prometric_codes;
+  return [];
 }
 
-function extractHoldId(json) {
-  return json?.hold_id || json?.id || json?.data?.hold_id || json?.data?.id || null;
+function toOptionLabel(item) {
+  return (
+    item?.name ||
+    item?.english_name ||
+    item?.occupation_name ||
+    item?.title ||
+    `Occupation #${item?.id || item?.occupation_id || ''}`
+  );
 }
 
-function extractReservationId(json) {
-  return json?.reservation?.id || json?.reservation_id || json?.id || json?.data?.reservation?.id || json?.data?.reservation_id || json?.data?.id || null;
+function getOccupationId(item) {
+  return item?.id || item?.occupation_id || item?.value || '';
 }
 
-function extractPaymentId(json) {
-  return json?.payment?.id || json?.payment_id || json?.id || json?.data?.payment?.id || json?.data?.payment_id || json?.data?.id || null;
-}
-
-function getReservationDetails(json, fallback = {}) {
-  const reservation = json?.reservation || json?.data?.reservation || json?.data || json || {};
+function normalizeOccupation(item) {
+  const id = getOccupationId(item);
   return {
-    id: extractReservationId(json),
-    examSessionId: reservation?.exam_session_id ?? fallback.examSessionId ?? null,
-    occupationId: reservation?.occupation_id ?? fallback.occupationId ?? null,
-    languageCode: reservation?.language_code ?? fallback.languageCode ?? null,
-    siteId: reservation?.site_id ?? fallback.siteId ?? null,
-    siteCity: reservation?.site_city ?? fallback.siteCity ?? null,
-    methodology: reservation?.methodology ?? fallback.methodology ?? null,
-    status: reservation?.status || json?.status || json?.data?.status || null,
+    raw: item,
+    id,
+    name: toOptionLabel(item),
+    categoryId: item?.category_id || item?.category?.id || '',
+    methodology: item?.methodology_type || item?.methodology || 'in_person',
+    languageCodes: pickArray(item?.prometric_codes).map((code) => ({
+      code: code?.code || code?.language_code || '',
+      englishName: code?.english_name || code?.name || code?.code || '',
+    })),
   };
 }
 
-function getPaymentDetails(json, fallback = {}) {
-  const payment = json?.payment || json?.data?.payment || json?.data || json || {};
-  return {
-    id: extractPaymentId(json),
-    status: payment?.status || json?.status || json?.data?.status || fallback.status || null,
-    paymentMethod: payment?.payment_method || fallback.paymentMethod || null,
-    payableType: payment?.payable_type || fallback.payableType || null,
-    payableId: payment?.payable_id || fallback.payableId || null,
-    amount: payment?.amount ?? fallback.amount ?? null,
-  };
+function normalizeDateValue(value) {
+  if (!value) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString().slice(0, 10);
 }
 
-function getPrometricCodes(occupation) {
-  return occupation?.category?.prometric_codes || [];
+function getSessionId(item) {
+  return item?.id || item?.session_id || item?.exam_session_id || '';
 }
 
-function getSessionId(session) {
-  return session?.id || session?.exam_session_id || '';
+function getSessionSiteId(item) {
+  return item?.site_id || item?.test_center?.site_id || item?.test_center?.id || '';
 }
 
-function getSessionSiteId(session) {
-  return session?.site_id ?? session?.test_center?.site_id ?? session?.test_center_id ?? session?.site?.id ?? '';
+function getSessionSiteCity(item) {
+  return item?.site_city || item?.test_center?.city || item?.city || '';
 }
 
-function getSessionSiteCity(session) {
-  return session?.test_center?.city || session?.site_city || session?.city || session?.site_city_name || session?.test_center_city || '';
+function getSessionCenterName(item) {
+  return (
+    item?.test_center_name ||
+    item?.test_center?.name ||
+    item?.test_center?.test_center_name ||
+    `${getSessionSiteCity(item) || 'Center'}${getSessionSiteId(item) ? ` (#${getSessionSiteId(item)})` : ''}`
+  );
 }
 
-function getSessionLabel(session) {
-  return session?.test_center_name || session?.test_center?.name || 'Unknown Center';
+function getPrometricCodes(item) {
+  return pickArray(item?.prometric_codes || item?.languages || item?.language_codes);
 }
 
-export default function ExamBooking() {
-  const [out, setOut] = useState('');
-  const [categoryId, setCategoryId] = useState('56');
-  const [startDateFrom, setStartDateFrom] = useState('');
-  const [perPage, setPerPage] = useState('1000');
-  const [availableSeats, setAvailableSeats] = useState('greater_than::0');
-  const [status, setStatus] = useState('scheduled');
-  const [city, setCity] = useState('Mymensingh');
-  const [examDate, setExamDate] = useState('');
-  const [occupationId, setOccupationId] = useState('');
-  const [languageCode, setLanguageCode] = useState('');
+function extractId(payload, keys) {
+  for (const key of keys) {
+    const value = payload?.[key] || payload?.data?.[key] || payload?.result?.[key];
+    if (value) return value;
+  }
+  return '';
+}
+
+export default function BookingPage() {
+  const router = useRouter();
+  const [occupations, setOccupations] = useState([]);
+  const [availableDates, setAvailableDates] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [selectedOccupationId, setSelectedOccupationId] = useState('');
+  const [city, setCity] = useState('Rajshahi');
+  const [availableDate, setAvailableDate] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [methodology, setMethodology] = useState('in_person');
   const [siteId, setSiteId] = useState('');
   const [siteCity, setSiteCity] = useState('');
-  const [methodology, setMethodology] = useState('in_person');
-  const [availableDatesRaw, setAvailableDatesRaw] = useState(null);
-  const [sessionsRaw, setSessionsRaw] = useState(null);
-  const [selectedSessionId, setSelectedSessionId] = useState('');
-  const [holdRaw, setHoldRaw] = useState(null);
-  const [reservationRaw, setReservationRaw] = useState(null);
-  const [paymentMethod, setPaymentMethod] = useState('card');
-  const [paymentId, setPaymentId] = useState('');
-  const [paymentRaw, setPaymentRaw] = useState(null);
-  const [occupationsRaw, setOccupationsRaw] = useState(null);
+  const [sessionId, setSessionId] = useState('');
+  const [languageCode, setLanguageCode] = useState('');
+  const [holdId, setHoldId] = useState('');
+  const [reservationId, setReservationId] = useState('');
+  const [loadingOccupations, setLoadingOccupations] = useState(false);
+  const [loadingDates, setLoadingDates] = useState(false);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [creatingHold, setCreatingHold] = useState(false);
+  const [booking, setBooking] = useState(false);
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
+
+  const selectedOccupation = useMemo(
+    () => occupations.find((item) => String(item.id) === String(selectedOccupationId)) || null,
+    [occupations, selectedOccupationId]
+  );
+
+  const selectedSession = useMemo(
+    () => sessions.find((item) => String(getSessionId(item)) === String(sessionId)) || null,
+    [sessions, sessionId]
+  );
 
   useEffect(() => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-    if (!token) window.location.href = '/auth/login';
+    async function loadOccupations() {
+      setLoadingOccupations(true);
+      setError('');
+
+      try {
+        const data = await api('/api/svp/occupations?locale=en&per_page=200&page=1');
+        const items = pickArray(data).map(normalizeOccupation);
+        setOccupations(items);
+      } catch (err) {
+        setError(err?.message || 'Failed to load occupations');
+      } finally {
+        setLoadingOccupations(false);
+      }
+    }
+
+    loadOccupations();
   }, []);
 
-  async function loadOccupations() {
-    setOut('Loading occupations...');
-    try {
-      const res = await api('/api/svp/occupations');
-      setOccupationsRaw(res);
-      setOut('Occupations loaded.');
-      const arr = pickArray(res);
-      if (arr?.[0]?.id) {
-        if (!occupationId) setOccupationId(String(arr[0].id));
-        const firstLanguageCode = getPrometricCodes(arr[0])[0]?.code;
-        if (!languageCode && firstLanguageCode) setLanguageCode(firstLanguageCode);
-      }
-    } catch (e) {
-      setOut(JSON.stringify(e.data || e.message, null, 2));
+  useEffect(() => {
+    if (!router.isReady) return;
+
+    if (router.query.occupationId) setSelectedOccupationId(String(router.query.occupationId));
+    if (router.query.categoryId) setCategoryId(String(router.query.categoryId));
+    if (router.query.methodology) setMethodology(String(router.query.methodology));
+    if (router.query.languageCode) setLanguageCode(String(router.query.languageCode));
+    if (router.query.siteId) setSiteId(String(router.query.siteId));
+    if (router.query.siteCity) setSiteCity(String(router.query.siteCity));
+    if (router.query.examDate) setAvailableDate(normalizeDateValue(String(router.query.examDate)));
+    if (router.query.reschedule === '1') {
+      setStatus('Reschedule mode active. Select a new date/session and complete booking.');
     }
-  }
-
-  async function searchAvailableDates(e) {
-    e?.preventDefault?.();
-    setOut('Searching available dates...');
-
-    const startDate = startDateFrom || new Date().toISOString().slice(0, 10);
-    const qs = new URLSearchParams({
-      per_page: perPage,
-      category_id: categoryId,
-      start_at_date_from: startDate,
-      available_seats: availableSeats,
-      status,
-    }).toString();
-
-    try {
-      const res = await api(`/api/svp/available-dates?${qs}`);
-      setAvailableDatesRaw(res);
-      setOut('Available dates loaded.');
-      const arr = pickArray(res);
-      const maybeDate = arr?.[0]?.date || arr?.[0]?.exam_date || arr?.[0]?.day || arr?.[0] || '';
-      if (typeof maybeDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(maybeDate)) {
-        setExamDate(maybeDate);
-      }
-    } catch (e) {
-      setOut(JSON.stringify(e.data || e.message, null, 2));
-    }
-  }
-
-  async function loadExamSessions() {
-    setOut('Loading exam sessions...');
-    const qs = new URLSearchParams({
-      category_id: categoryId,
-      city,
-      exam_date: examDate,
-    }).toString();
-
-    try {
-      const res = await api(`/api/svp/exam-sessions?${qs}`);
-      setSessionsRaw(res);
-      setOut('Test centers loaded.');
-      const arr = pickArray(res);
-      const first = arr?.[0];
-      const firstId = getSessionId(first);
-      if (firstId) setSelectedSessionId(String(firstId));
-      if (first) {
-        setSiteId(String(getSessionSiteId(first) || ''));
-        setSiteCity(String(getSessionSiteCity(first) || ''));
-      }
-    } catch (e) {
-      setOut(JSON.stringify(e.data || e.message, null, 2));
-    }
-  }
-
-  async function createHold() {
-    if (!selectedSessionId) {
-      setOut('Select an exam session first.');
-      return;
-    }
-
-    setOut('Creating temporary seat...');
-    try {
-      const res = await api('/api/svp/temporary-seats', {
-        method: 'POST',
-        body: { exam_session_id: [Number(selectedSessionId)], methodology },
-      });
-      setHoldRaw(res);
-      setOut('Temporary seat created.');
-    } catch (e) {
-      setOut(e?.data?.message || e?.message || 'Temporary seat request failed.');
-    }
-  }
-
-  async function bookReservation() {
-    if (!selectedSessionId) {
-      setOut('Select an exam session first.');
-      return;
-    }
-    if (!occupationId) {
-      setOut('occupation_id is required.');
-      return;
-    }
-
-    setOut('Booking exam reservation...');
-    try {
-      const res = await api('/api/svp/exam-reservations', {
-        method: 'POST',
-        body: {
-          exam_session_id: Number(selectedSessionId),
-          occupation_id: Number(occupationId),
-          language_code: languageCode,
-          site_id: siteId ? Number(siteId) : null,
-          site_city: siteCity || null,
-          hold_id: holdRaw ? extractHoldId(holdRaw) : null,
-          methodology,
-        },
-      });
-      setReservationRaw(res);
-      setOut('Reservation created successfully.');
-    } catch (e) {
-      setOut(e?.data?.message || e?.message || 'Reservation request failed.');
-    }
-  }
-
-  async function createPayment() {
-    const reservationId = extractReservationId(reservationRaw);
-    if (!reservationId) {
-      setOut('Create reservation first.');
-      return;
-    }
-
-    setOut('Creating payment...');
-    try {
-      const res = await api('/api/svp/payments', {
-        method: 'POST',
-        body: {
-          payment: {
-            payment_method: paymentMethod,
-            payable_type: 'Reservation',
-            payable_id: Number(reservationId),
-          },
-        },
-      });
-      setPaymentRaw(res);
-      const pid = extractPaymentId(res);
-      if (pid) setPaymentId(String(pid));
-      setOut('Payment created successfully.');
-    } catch (e) {
-      setOut(e?.data?.message || e?.message || 'Payment create request failed.');
-    }
-  }
-
-  async function finalizePayment() {
-    if (!paymentId) {
-      setOut('Payment ID is required.');
-      return;
-    }
-
-    setOut('Finalizing payment...');
-    try {
-      const res = await api(`/api/svp/payments/${encodeURIComponent(paymentId)}`, {
-        method: 'PUT',
-      });
-      setPaymentRaw(res);
-      setOut('Payment finalized successfully.');
-    } catch (e) {
-      setOut(e?.data?.message || e?.message || 'Payment finalize request failed.');
-    }
-  }
-
-  const sessionList = useMemo(() => pickArray(sessionsRaw) || [], [sessionsRaw]);
-  const occupationList = useMemo(() => pickArray(occupationsRaw) || [], [occupationsRaw]);
-  const selectedOccupation = useMemo(
-    () => occupationList.find((occupation) => String(occupation?.id) === String(occupationId)) || null,
-    [occupationList, occupationId]
-  );
-  const languageOptions = useMemo(() => getPrometricCodes(selectedOccupation), [selectedOccupation]);
-  const reservationDetails = useMemo(
-    () => (
-      reservationRaw
-        ? getReservationDetails(reservationRaw, {
-            examSessionId: selectedSessionId || null,
-            occupationId: occupationId || null,
-            languageCode: languageCode || null,
-            siteId: siteId || null,
-            siteCity: siteCity || null,
-            methodology,
-          })
-        : null
-    ),
-    [reservationRaw, selectedSessionId, occupationId, languageCode, siteId, siteCity, methodology]
-  );
-  const paymentDetails = useMemo(
-    () => (
-      paymentRaw
-        ? getPaymentDetails(paymentRaw, {
-            paymentMethod,
-            payableType: 'Reservation',
-            payableId: reservationDetails?.id || null,
-          })
-        : null
-    ),
-    [paymentRaw, paymentMethod, reservationDetails]
-  );
-  const selectedSession = useMemo(
-    () => sessionList.find((session) => String(getSessionId(session)) === String(selectedSessionId)) || null,
-    [sessionList, selectedSessionId]
-  );
+  }, [router.isReady, router.query]);
 
   useEffect(() => {
     if (!selectedOccupation) return;
-    const category = selectedOccupation?.category_id || selectedOccupation?.category?.id;
-    if (category) setCategoryId(String(category));
-    if (!languageOptions.length) return;
-    const hasSelected = languageOptions.some((option) => option?.code === languageCode);
-    if (!hasSelected && languageOptions[0]?.code) {
-      setLanguageCode(languageOptions[0].code);
+    if (!categoryId && selectedOccupation.categoryId) setCategoryId(String(selectedOccupation.categoryId));
+    if (!methodology && selectedOccupation.methodology) setMethodology(String(selectedOccupation.methodology));
+    if (!languageCode && selectedOccupation.languageCodes[0]?.code) {
+      setLanguageCode(String(selectedOccupation.languageCodes[0].code));
     }
-  }, [selectedOccupation, languageOptions, languageCode]);
+  }, [selectedOccupation, categoryId, methodology, languageCode]);
 
   useEffect(() => {
     if (!selectedSession) return;
     setSiteId(String(getSessionSiteId(selectedSession) || ''));
     setSiteCity(String(getSessionSiteCity(selectedSession) || ''));
-    if (!city) {
-      const nextCity = getSessionSiteCity(selectedSession);
-      if (nextCity) setCity(String(nextCity));
+    const codes = getPrometricCodes(selectedSession);
+    if (codes[0]?.code || codes[0]?.language_code) {
+      setLanguageCode(String(codes[0].code || codes[0].language_code));
     }
-  }, [sessionList, selectedSessionId, city]);
+  }, [selectedSession]);
+
+  async function searchDates() {
+    if (!selectedOccupationId) {
+      setError('Select occupation first');
+      return;
+    }
+
+    setLoadingDates(true);
+    setError('');
+    setStatus('');
+
+    try {
+      const params = new URLSearchParams({
+        occupation_id: String(selectedOccupationId),
+        methodology_type: methodology || 'in_person',
+        locale: 'en',
+      });
+
+      if (city) params.set('city', city);
+      if (categoryId) params.set('category_id', categoryId);
+
+      const data = await api(`/api/svp/available-dates?${params.toString()}`);
+      const dates = pickArray(data).map((item) => {
+        const value = typeof item === 'string' ? item : item?.date || item?.available_date || '';
+        return normalizeDateValue(value);
+      }).filter(Boolean);
+
+      setAvailableDates(dates);
+      if (!availableDate && dates[0]) setAvailableDate(dates[0]);
+      setStatus(dates.length ? 'Available dates loaded' : 'No available dates found');
+    } catch (err) {
+      setError(err?.message || 'Failed to load available dates');
+    } finally {
+      setLoadingDates(false);
+    }
+  }
+
+  async function loadSessions() {
+    if (!selectedOccupationId || !availableDate) {
+      setError('Select occupation and date first');
+      return;
+    }
+
+    setLoadingSessions(true);
+    setError('');
+    setStatus('');
+
+    try {
+      const params = new URLSearchParams({
+        occupation_id: String(selectedOccupationId),
+        available_date: availableDate,
+        methodology_type: methodology || 'in_person',
+        locale: 'en',
+      });
+
+      if (city) params.set('city', city);
+      if (categoryId) params.set('category_id', categoryId);
+
+      const data = await api(`/api/svp/exam-sessions?${params.toString()}`);
+      const items = pickArray(data);
+      setSessions(items);
+      if (items[0]) setSessionId(String(getSessionId(items[0])));
+      setStatus(items.length ? 'Test sessions loaded' : 'No test sessions found');
+    } catch (err) {
+      setError(err?.message || 'Failed to load test sessions');
+    } finally {
+      setLoadingSessions(false);
+    }
+  }
+
+  async function createHold() {
+    if (!sessionId) {
+      setError('Select test center / session first');
+      return;
+    }
+
+    setCreatingHold(true);
+    setError('');
+    setStatus('');
+
+    try {
+      const data = await api('/api/svp/temporary-seats', {
+        method: 'POST',
+        body: {
+          exam_session_id: Number(sessionId),
+          methodology_type: methodology || 'in_person',
+          language_code: languageCode || undefined,
+        },
+      });
+
+      const nextHoldId = extractId(data, ['id', 'hold_id', 'temporary_seat_id']);
+      setHoldId(String(nextHoldId || ''));
+      setStatus(nextHoldId ? `Hold created: #${nextHoldId}` : 'Hold created');
+    } catch (err) {
+      setError(err?.message || 'Failed to create hold');
+    } finally {
+      setCreatingHold(false);
+    }
+  }
+
+  async function bookReservation() {
+    if (!sessionId) {
+      setError('Select test center / session first');
+      return;
+    }
+
+    setBooking(true);
+    setError('');
+    setStatus('');
+
+    try {
+      const data = await api('/api/svp/exam-reservations', {
+        method: 'POST',
+        body: {
+          exam_session_id: Number(sessionId),
+          occupation_id: Number(selectedOccupationId),
+          methodology_type: methodology || 'in_person',
+          language_code: languageCode || undefined,
+          temporary_seat_id: holdId ? Number(holdId) : undefined,
+        },
+      });
+
+      const nextReservationId = extractId(data, ['id', 'reservation_id', 'exam_reservation_id']);
+      setReservationId(String(nextReservationId || ''));
+      setStatus(nextReservationId ? `Reservation created: #${nextReservationId}` : 'Reservation created');
+    } catch (err) {
+      setError(err?.message || 'Failed to book reservation');
+    } finally {
+      setBooking(false);
+    }
+  }
 
   return (
     <div className="booking-shell">
-      <div className="booking-panel">
-        <div className="booking-header">
+      <div className="booking-card">
+        <div className="booking-head">
           <div>
-            <h1>Create New Booking</h1>
-            <p>{out || 'Using live SVP session and real API data.'}</p>
+            <p className="eyebrow">Booking</p>
+            <h1>Create new booking</h1>
+            <p className="muted">Occupation, available dates, booked sessions, and hold/book flow in one page.</p>
           </div>
-          <Link className="text-link booking-back" href="/dashboard">Back</Link>
+          <div className="head-actions">
+            <Link href="/dashboard" className="secondary-btn">
+              Dashboard
+            </Link>
+            <Link href="/exam/reservations" className="secondary-btn">
+              My bookings
+            </Link>
+          </div>
         </div>
 
-        <div className="booking-block">
-          <label>Occupation *</label>
-          <div className="booking-grid booking-grid-three">
-            <div className="booking-field">
-              <label>per_page</label>
-              <input value={perPage} onChange={(e) => setPerPage(e.target.value)} />
-            </div>
-            <div className="booking-field">
-              <label>page</label>
-              <input value="1" readOnly />
-            </div>
-            <div className="booking-field">
-              <label>name</label>
-              <input value="" readOnly placeholder="optional" />
-            </div>
-          </div>
-          <button className="booking-load" type="button" onClick={loadOccupations}>Load Occupations</button>
-          {occupationList.length > 0 && (
-            <select value={occupationId} onChange={(e) => setOccupationId(e.target.value)}>
-              {occupationList.map((occupation) => (
-                <option key={occupation.id} value={occupation.id}>
-                  {occupation.name} (#{occupation.id})
+        {status ? <div className="status-card status-ok">{status}</div> : null}
+        {error ? <div className="status-card status-error">{error}</div> : null}
+
+        <div className="form-grid">
+          <label className="field field-wide">
+            <span>Occupation</span>
+            <select value={selectedOccupationId} onChange={(e) => setSelectedOccupationId(e.target.value)}>
+              <option value="">{loadingOccupations ? 'Loading occupations...' : 'Select occupation'}</option>
+              {occupations.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} {item.id ? `(#${item.id})` : ''}
                 </option>
               ))}
             </select>
-          )}
-        </div>
+          </label>
 
-        <div className="booking-grid">
-          <div className="booking-field">
-            <label>City *</label>
-            <input value={city} onChange={(e) => setCity(e.target.value)} />
-          </div>
-          <div className="booking-field">
-            <label>Available Date *</label>
-            <input value={examDate} onChange={(e) => setExamDate(e.target.value)} placeholder="YYYY-MM-DD" />
-          </div>
-        </div>
+          <label className="field">
+            <span>City</span>
+            <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Rajshahi" />
+          </label>
 
-        <div className="booking-grid">
-          <div className="booking-field">
-            <label>Category Id</label>
-            <input value={categoryId} onChange={(e) => setCategoryId(e.target.value)} />
-          </div>
-          <div className="booking-field">
-            <label>Methodology</label>
+          <label className="field">
+            <span>Available date</span>
+            <input
+              type="date"
+              value={availableDate}
+              onChange={(e) => setAvailableDate(e.target.value)}
+              list="available-dates"
+            />
+            <datalist id="available-dates">
+              {availableDates.map((item) => (
+                <option key={item} value={item} />
+              ))}
+            </datalist>
+          </label>
+
+          <label className="field">
+            <span>Category ID</span>
+            <input value={categoryId} onChange={(e) => setCategoryId(e.target.value)} placeholder="Category ID" />
+          </label>
+
+          <label className="field">
+            <span>Methodology</span>
             <select value={methodology} onChange={(e) => setMethodology(e.target.value)}>
               <option value="in_person">in_person</option>
               <option value="remote">remote</option>
             </select>
-          </div>
-        </div>
+          </label>
 
-        <div className="booking-grid">
-          <div className="booking-field">
-            <label>site_id (auto)</label>
-            <input value={siteId} readOnly />
-          </div>
-          <div className="booking-field">
-            <label>site_city (auto)</label>
-            <input value={siteCity} readOnly />
-          </div>
-        </div>
-
-        <button className="booking-load" type="button" onClick={searchAvailableDates}>Search Available Dates</button>
-        <button className="booking-load" type="button" onClick={loadExamSessions}>Load Test Sessions</button>
-
-        {sessionList.length > 0 && (
-          <div className="booking-field">
-            <label>Test Center / Session *</label>
-            <select value={selectedSessionId} onChange={(e) => setSelectedSessionId(e.target.value)}>
-              {sessionList.map((session) => (
-                <option key={getSessionId(session)} value={getSessionId(session)}>
-                  {getSessionLabel(session)}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div className="booking-field">
-          <label>Language Code</label>
-          {languageOptions.length > 0 ? (
+          <label className="field field-wide">
+            <span>Language</span>
             <select value={languageCode} onChange={(e) => setLanguageCode(e.target.value)}>
-              {languageOptions.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.english_name || option.code}
+              <option value="">Select language</option>
+              {selectedOccupation?.languageCodes.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.englishName} {item.code ? `(${item.code})` : ''}
                 </option>
               ))}
             </select>
-          ) : (
-            <input value={languageCode} onChange={(e) => setLanguageCode(e.target.value)} />
-          )}
+          </label>
         </div>
 
-        <div className="booking-actions">
-          <button className="booking-action" type="button" onClick={createHold}>Create Hold</button>
-          <button className="booking-action" type="button" onClick={bookReservation}>Book</button>
-        </div>
-
-        {reservationDetails ? (
-          <div className="booking-result">
-            <h3>Reservation Details</h3>
+        {selectedOccupation ? (
+          <div className="detail-box">
+            <h2>Occupation details from API</h2>
             <div className="detail-grid">
-              <div className="detail-item"><span>Reservation ID</span><strong>{reservationDetails.id || 'N/A'}</strong></div>
-              <div className="detail-item"><span>Status</span><strong>{reservationDetails.status || 'Created'}</strong></div>
-              <div className="detail-item"><span>Exam Session ID</span><strong>{reservationDetails.examSessionId || 'N/A'}</strong></div>
-              <div className="detail-item"><span>Occupation ID</span><strong>{reservationDetails.occupationId || 'N/A'}</strong></div>
-              <div className="detail-item"><span>Language Code</span><strong>{reservationDetails.languageCode || 'N/A'}</strong></div>
-              <div className="detail-item"><span>Site ID</span><strong>{reservationDetails.siteId || 'N/A'}</strong></div>
+              <div>
+                <span>Name</span>
+                <strong>{selectedOccupation.name}</strong>
+              </div>
+              <div>
+                <span>Occupation ID</span>
+                <strong>{selectedOccupation.id || '-'}</strong>
+              </div>
+              <div>
+                <span>Category ID</span>
+                <strong>{selectedOccupation.categoryId || '-'}</strong>
+              </div>
+              <div>
+                <span>Methodology</span>
+                <strong>{selectedOccupation.methodology || '-'}</strong>
+              </div>
             </div>
           </div>
         ) : null}
 
-        {reservationDetails ? (
+        <div className="button-row">
+          <button className="secondary-btn" type="button" onClick={searchDates} disabled={loadingDates}>
+            {loadingDates ? 'Loading dates...' : 'Load available dates'}
+          </button>
+          <button className="secondary-btn" type="button" onClick={loadSessions} disabled={loadingSessions}>
+            {loadingSessions ? 'Loading sessions...' : 'Load test sessions'}
+          </button>
+        </div>
+
+        {sessions.length ? (
           <>
-            <div className="booking-grid">
-              <div className="booking-field">
-                <label>Payment Method</label>
-                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-                  <option value="card">card</option>
-                </select>
+            <label className="field field-wide">
+              <span>Test center / session</span>
+              <select value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
+                <option value="">Select test center</option>
+                {sessions.map((item) => (
+                  <option key={getSessionId(item)} value={getSessionId(item)}>
+                    {getSessionCenterName(item)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="detail-grid detail-grid--session">
+              <div>
+                <span>site_id</span>
+                <strong>{siteId || '-'}</strong>
               </div>
-              <div className="booking-field">
-                <label>payment_id</label>
-                <input value={paymentId} onChange={(e) => setPaymentId(e.target.value)} placeholder="auto after create payment" />
+              <div>
+                <span>site_city</span>
+                <strong>{siteCity || '-'}</strong>
+              </div>
+              <div>
+                <span>hold_id</span>
+                <strong>{holdId || '-'}</strong>
+              </div>
+              <div>
+                <span>reservation_id</span>
+                <strong>{reservationId || '-'}</strong>
               </div>
             </div>
 
-            <div className="booking-actions">
-              <button className="booking-action" type="button" onClick={createPayment}>Create Payment</button>
-              <button className="booking-action" type="button" onClick={finalizePayment}>Finalize Payment</button>
+            <div className="button-row">
+              <button className="primary-btn" type="button" onClick={createHold} disabled={creatingHold}>
+                {creatingHold ? 'Creating hold...' : 'Create hold'}
+              </button>
+              <button className="primary-btn" type="button" onClick={bookReservation} disabled={booking}>
+                {booking ? 'Booking...' : 'Book'}
+              </button>
             </div>
           </>
         ) : null}
-
-        {paymentDetails ? (
-          <div className="booking-result">
-            <h3>Payment Details</h3>
-            <div className="detail-grid">
-              <div className="detail-item"><span>Payment ID</span><strong>{paymentDetails.id || paymentId || 'N/A'}</strong></div>
-              <div className="detail-item"><span>Status</span><strong>{paymentDetails.status || 'Created'}</strong></div>
-              <div className="detail-item"><span>Method</span><strong>{paymentDetails.paymentMethod || paymentMethod}</strong></div>
-              <div className="detail-item"><span>Payable ID</span><strong>{paymentDetails.payableId || reservationDetails?.id || 'N/A'}</strong></div>
-            </div>
-          </div>
-        ) : null}
       </div>
+
+      <style jsx>{`
+        .booking-shell {
+          min-height: 100vh;
+          padding: 24px;
+          background: #0e1730;
+        }
+        .booking-card {
+          width: min(920px, 100%);
+          margin: 0 auto;
+          padding: 24px;
+          border-radius: 20px;
+          background: linear-gradient(180deg, #16234a 0%, #111a34 100%);
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.28);
+          color: #fff;
+        }
+        .booking-head {
+          display: flex;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 20px;
+        }
+        .head-actions {
+          display: flex;
+          gap: 10px;
+        }
+        .eyebrow {
+          margin: 0 0 8px;
+          font-size: 12px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: #8ec0c8;
+          font-weight: 700;
+        }
+        h1, h2 {
+          margin: 0 0 8px;
+        }
+        .muted {
+          margin: 0;
+          color: #b9c2d6;
+        }
+        .status-card {
+          margin-bottom: 16px;
+          padding: 12px 14px;
+          border-radius: 12px;
+        }
+        .status-ok {
+          background: rgba(30, 132, 73, 0.2);
+          color: #a3e5bc;
+        }
+        .status-error {
+          background: rgba(165, 43, 43, 0.22);
+          color: #ffb6b6;
+        }
+        .form-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 16px;
+        }
+        .field {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .field-wide {
+          grid-column: 1 / -1;
+        }
+        .field span {
+          font-size: 13px;
+          font-weight: 700;
+        }
+        .field input,
+        .field select {
+          width: 100%;
+          min-height: 48px;
+          border-radius: 12px;
+          border: 1px solid #44506f;
+          background: #f7f9fd;
+          color: #182238;
+          padding: 0 14px;
+        }
+        .button-row {
+          display: flex;
+          gap: 12px;
+          margin-top: 18px;
+        }
+        .primary-btn,
+        .secondary-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 46px;
+          padding: 0 18px;
+          border: 0;
+          border-radius: 12px;
+          text-decoration: none;
+          cursor: pointer;
+          font-weight: 700;
+        }
+        .primary-btn {
+          background: #87c2c7;
+          color: #fff;
+        }
+        .secondary-btn {
+          background: #1f2a4b;
+          color: #fff;
+        }
+        .detail-box {
+          margin-top: 20px;
+          padding: 18px;
+          border-radius: 16px;
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .detail-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+        }
+        .detail-grid div {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          padding: 14px;
+          border-radius: 14px;
+          background: rgba(6, 12, 26, 0.28);
+        }
+        .detail-grid span {
+          color: #b9c2d6;
+          font-size: 12px;
+          text-transform: uppercase;
+        }
+        .detail-grid strong {
+          word-break: break-word;
+        }
+        .detail-grid--session {
+          margin-top: 16px;
+        }
+        @media (max-width: 720px) {
+          .booking-head,
+          .button-row,
+          .head-actions {
+            flex-direction: column;
+          }
+          .form-grid,
+          .detail-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
     </div>
   );
 }
