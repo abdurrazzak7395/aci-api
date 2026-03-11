@@ -44,16 +44,32 @@ export default function Otp() {
   }
 
   return (
-    <div className="container">
-      <h2>OTP Verify</h2>
-      <div className="card">
-        <p className="small">Login: {String(login || '')}</p>
-        <form onSubmit={verify}>
+    <div className="auth-shell">
+      <div className="auth-panel">
+        <div className="auth-heading">
+          <h1>OTP verification</h1>
+          <p>Enter the OTP sent to your selected method and complete sign in.</p>
+        </div>
+
+        <div className="auth-meta">
+          <span>Account</span>
+          <strong>{String(login || '')}</strong>
+          <span>Verify by</span>
+          <strong>{String(otpMethod || '').toUpperCase()}</strong>
+        </div>
+
+        <form className="auth-form" onSubmit={verify}>
           <label>OTP Code</label>
-          <input value={otpAttempt} onChange={(e) => setOtpAttempt(e.target.value)} required />
-          <button type="submit">Verify OTP</button>
+          <input
+            value={otpAttempt}
+            onChange={(e) => setOtpAttempt(e.target.value)}
+            placeholder="Enter OTP code"
+            required
+          />
+
+          <button type="submit" className="auth-submit">Verify OTP</button>
+          <p className="auth-message">{msg}</p>
         </form>
-        <p className="small">{msg}</p>
       </div>
     </div>
   );

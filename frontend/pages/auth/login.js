@@ -27,22 +27,41 @@ export default function Login() {
   }
 
   return (
-    <div className="container">
-      <h2>Login (SVP)</h2>
-      <form className="card" onSubmit={submit}>
-        <label>Email/Username</label>
-        <input value={login} onChange={(e) => setLogin(e.target.value)} required />
-        <label>Password</label>
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-        <label>OTP Method</label>
-        <select value={otpMethod} onChange={(e) => setOtpMethod(e.target.value)}>
-          <option value="email">email</option>
-          <option value="sms">sms</option>
-        </select>
-        <div style={{ height: 12 }} />
-        <button type="submit">Send OTP</button>
-        <p className="small">{msg}</p>
-      </form>
+    <div className="auth-shell">
+      <div className="auth-panel">
+        <div className="auth-heading">
+          <h1>Welcome back</h1>
+          <p>Sign in to continue with your SVP account and request OTP verification.</p>
+        </div>
+
+        <form className="auth-form" onSubmit={submit}>
+          <label>Email</label>
+          <input
+            value={login}
+            onChange={(e) => setLogin(e.target.value)}
+            placeholder="Enter your email"
+            required
+          />
+
+          <label>Password</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Enter your password"
+            required
+          />
+
+          <label>OTP Verify Option</label>
+          <select value={otpMethod} onChange={(e) => setOtpMethod(e.target.value)}>
+            <option value="email">Email</option>
+            <option value="sms">SMS</option>
+          </select>
+
+          <button type="submit" className="auth-submit">Sign in</button>
+          <p className="auth-message">{msg}</p>
+        </form>
+      </div>
     </div>
   );
 }
