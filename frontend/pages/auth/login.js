@@ -10,14 +10,8 @@ export default function Login() {
   const router = useRouter();
 
   useEffect(() => {
-    const portalToken = typeof window !== 'undefined' ? sessionStorage.getItem('portalAccessToken') : '';
     const portalLogin = typeof window !== 'undefined' ? sessionStorage.getItem('portal_login') : '';
     const portalPassword = typeof window !== 'undefined' ? sessionStorage.getItem('portal_password') : '';
-
-    if (!portalToken) {
-      router.replace('/auth/access');
-      return;
-    }
 
     setLogin(String(portalLogin || ''));
     setPassword(String(portalPassword || ''));
@@ -45,7 +39,7 @@ export default function Login() {
       <div className="auth-panel">
         <div className="auth-heading">
           <h1>Welcome back</h1>
-          <p>Step 2: continue with your approved SVP account and request OTP verification.</p>
+          <p>Sign in with your SVP account and request OTP verification.</p>
         </div>
 
         <form className="auth-form" onSubmit={submit}>

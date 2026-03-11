@@ -1,5 +1,12 @@
-import PortalAccessPage from '../components/PortalAccessPage';
+import { useEffect } from 'react';
+import { useRouter } from 'next/router';
 
 export default function UserLoginPage() {
-  return <PortalAccessPage mode="user" />;
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace('/auth/login');
+  }, [router]);
+
+  return null;
 }

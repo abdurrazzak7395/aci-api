@@ -8,6 +8,7 @@ import { signAccess } from '../lib/jwt.js';
 import { svpRequest } from '../lib/svpClient.js';
 
 const router = Router();
+const requirePortalApproval = String(process.env.REQUIRE_PORTAL_APPROVAL || 'false') === 'true';
 
 function pickFirst(...values) {
   for (const value of values) {
@@ -87,6 +88,13 @@ async function assertApprovedPortalUser(login, password) {
   return user;
 }
 
+async function resolvePortalUserForSvpLogin(login, password) {
+  if (requirePortalApproval) {
+    return assertApprovedPortalUser(login, password);
+  }
+  return prisma.user.findUnique({ where: { login } });
+}
+
 router.post('/portal-login', async (req, res, next) => {
   try {
     const { login, password } = PortalLoginSchema.parse(req.body);
@@ -121,7 +129,7 @@ router.post('/portal-login', async (req, res, next) => {
 router.post('/login', async (req, res, next) => {
   try {
     const { login, password, otpMethod } = LoginSchema.parse(req.body);
-    await assertApprovedPortalUser(login, password);
+    await resolvePortalUserForSvpLogin(login, password);
 
     const feApp = process.env.SVP_FE_APP || 'legislator';
     await svpRequest('/api/v1/sessions/login', {
@@ -138,7 +146,7 @@ router.post('/login', async (req, res, next) => {
 router.post('/otp-verify', async (req, res, next) => {
   try {
     const { login, password, otpAttempt, otpMethod } = OtpSchema.parse(req.body);
-    const approvedUser = await assertApprovedPortalUser(login, password);
+    const portalUser = await resolvePortalUserForSvpLogin(login, password);
     const feApp = process.env.SVP_FE_APP || 'legislator';
 
     const data = await svpRequest('/api/v1/sessions/otp', {
@@ -157,9 +165,12 @@ router.post('/otp-verify', async (req, res, next) => {
       throw err;
     }
 
-    const svpUserId = otpPayload.user?.id ?? approvedUser.svpUserId ?? null;
-    const email = otpPayload.user?.email ?? approvedUser.email ?? null;
-    const fullName = otpPayload.user?.full_name ?? otpPayload.user?.fullName ?? approvedUser.fullName ?? null;
+    const svpUserId = otpPayload.user?.id ?? portalUser?.svpUserId ?? null;
+    const email = otpPayload.user?.email ?? portalUser?.email ?? null;
+    const fullName = otpPayload.user?.full_name ?? otpPayload.user?.fullName ?? portalUser?.fullName ?? null;
+    const role = portalUser?.role || 'USER';
+    const isApproved = requirePortalApproval ? Boolean(portalUser?.isApproved) : true;
+    const approvedAt = isApproved ? (portalUser?.approvedAt || new Date()) : null;
 
     const user = await prisma.user.upsert({
       where: { login },
@@ -167,22 +178,22 @@ router.post('/otp-verify', async (req, res, next) => {
         svpUserId,
         email,
         fullName,
-        phone: approvedUser.phone,
-        role: approvedUser.role,
-        isApproved: approvedUser.isApproved,
-        approvedAt: approvedUser.approvedAt,
-        passwordHash: approvedUser.passwordHash,
+        phone: portalUser?.phone || null,
+        role,
+        isApproved,
+        approvedAt,
+        passwordHash: portalUser?.passwordHash || null,
       },
       create: {
         login,
         svpUserId,
         email,
         fullName,
-        phone: approvedUser.phone,
-        role: approvedUser.role,
-        isApproved: approvedUser.isApproved,
-        approvedAt: approvedUser.approvedAt,
-        passwordHash: approvedUser.passwordHash,
+        phone: portalUser?.phone || null,
+        role,
+        isApproved,
+        approvedAt,
+        passwordHash: portalUser?.passwordHash || null,
       },
     });
 
