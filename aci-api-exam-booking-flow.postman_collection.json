@@ -1,0 +1,422 @@
+{
+  "info": {
+    "_postman_id": "f874ef84-9cf8-46fd-9f80-52361f80f301",
+    "name": "ACI API Exam Booking Flow",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Step-by-step live exam booking workflow for the Railway backend. Run auth first, then the booking steps in order."
+  },
+  "variable": [
+    { "key": "base_url", "value": "https://aci-api-production.up.railway.app" },
+    { "key": "login", "value": "mdroni@yopmail.com" },
+    { "key": "password", "value": "MDRONI@ttc26" },
+    { "key": "otpMethod", "value": "email" },
+    { "key": "otpAttempt", "value": "" },
+    { "key": "accessToken", "value": "" },
+    { "key": "categoryId", "value": "56" },
+    { "key": "occupationPerPage", "value": "194" },
+    { "key": "occupationPage", "value": "1" },
+    { "key": "occupationName", "value": "" },
+    { "key": "occupationId", "value": "747" },
+    { "key": "city", "value": "Mymensingh" },
+    { "key": "examDate", "value": "2026-03-15" },
+    { "key": "startDateFrom", "value": "2026-03-15" },
+    { "key": "perPage", "value": "1000" },
+    { "key": "availableSeats", "value": "greater_than::0" },
+    { "key": "status", "value": "scheduled" },
+    { "key": "methodology", "value": "in_person" },
+    { "key": "languageCode", "value": "EMCEE" },
+    { "key": "sessionId", "value": "1055182" },
+    { "key": "siteId", "value": "3001" },
+    { "key": "siteCity", "value": "Mymensingh" },
+    { "key": "holdId", "value": "" },
+    { "key": "reservationId", "value": "" },
+    { "key": "paymentMethod", "value": "card" },
+    { "key": "paymentId", "value": "" },
+    { "key": "svpUserId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "POST /api/auth/login",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"login\": \"{{login}}\",\n  \"password\": \"{{password}}\",\n  \"otpMethod\": \"{{otpMethod}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "auth", "login" ]
+            },
+            "description": "Triggers OTP delivery. Expected response: {\"status\":\"OTP_SENT\"}."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/auth/otp-verify",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.accessToken) pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "  if (json.user && json.user.svpUserId) pm.collectionVariables.set('svpUserId', String(json.user.svpUserId));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"login\": \"{{login}}\",\n  \"password\": \"{{password}}\",\n  \"otpAttempt\": \"{{otpAttempt}}\",\n  \"otpMethod\": \"{{otpMethod}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/otp-verify",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "auth", "otp-verify" ]
+            },
+            "description": "Run after you receive the OTP. Stores accessToken and svpUserId automatically."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Lookup",
+      "item": [
+        {
+          "name": "GET /api/svp/occupations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  const list = json.occupations || json.data?.occupations || json.data || [];",
+                  "  if (Array.isArray(list) && list.length) {",
+                  "    const first = list[0];",
+                  "    if (first.id) pm.collectionVariables.set('occupationId', String(first.id));",
+                  "    const catId = first.category_id || first.category?.id;",
+                  "    if (catId) pm.collectionVariables.set('categoryId', String(catId));",
+                  "    const code = first.category?.prometric_codes?.[0]?.code;",
+                  "    if (code) pm.collectionVariables.set('languageCode', String(code));",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/occupations?per_page={{occupationPerPage}}&page={{occupationPage}}&name={{occupationName}}",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "svp", "occupations" ],
+              "query": [
+                { "key": "per_page", "value": "{{occupationPerPage}}" },
+                { "key": "page", "value": "{{occupationPage}}" },
+                { "key": "name", "value": "{{occupationName}}" }
+              ]
+            },
+            "description": "Loads occupations and automatically stores occupationId, categoryId, and the first language code."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/svp/available-dates",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  const list = json.available_dates || json.data?.available_dates || json.data || [];",
+                  "  if (Array.isArray(list) && list.length) {",
+                  "    const first = list[0];",
+                  "    const dateValue = first.date || first.exam_date || first.day || first;",
+                  "    if (typeof dateValue === 'string') pm.collectionVariables.set('examDate', dateValue);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/available-dates?per_page={{perPage}}&category_id={{categoryId}}&start_at_date_from={{startDateFrom}}&available_seats={{availableSeats}}&status={{status}}",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "svp", "available-dates" ],
+              "query": [
+                { "key": "per_page", "value": "{{perPage}}" },
+                { "key": "category_id", "value": "{{categoryId}}" },
+                { "key": "start_at_date_from", "value": "{{startDateFrom}}" },
+                { "key": "available_seats", "value": "{{availableSeats}}" },
+                { "key": "status", "value": "{{status}}" }
+              ]
+            },
+            "description": "Searches available dates and stores the first date into examDate."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/svp/exam-sessions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  const list = json.exam_sessions || json.data?.exam_sessions || json.data || [];",
+                  "  if (Array.isArray(list) && list.length) {",
+                  "    const first = list[0];",
+                  "    const id = first.id || first.exam_session_id;",
+                  "    const siteId = first.site_id || first.test_center_id || first.site?.id;",
+                  "    const city = first.site_city || first.city || first.site_city_name || first.test_center_city;",
+                  "    if (id) pm.collectionVariables.set('sessionId', String(id));",
+                  "    if (siteId != null) pm.collectionVariables.set('siteId', String(siteId));",
+                  "    if (city) pm.collectionVariables.set('siteCity', String(city));",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/exam-sessions?category_id={{categoryId}}&city={{city}}&exam_date={{examDate}}",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "svp", "exam-sessions" ],
+              "query": [
+                { "key": "category_id", "value": "{{categoryId}}" },
+                { "key": "city", "value": "{{city}}" },
+                { "key": "exam_date", "value": "{{examDate}}" }
+              ]
+            },
+            "description": "Loads exam sessions and stores sessionId, siteId, and siteCity from the first result."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Booking",
+      "item": [
+        {
+          "name": "POST /api/svp/temporary-seats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  const holdId = json.hold_id || json.id || json.data?.hold_id || json.data?.id;",
+                  "  if (holdId) pm.collectionVariables.set('holdId', String(holdId));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"exam_session_id\": [{{sessionId}}],\n  \"methodology\": \"{{methodology}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/svp/temporary-seats",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "svp", "temporary-seats" ]
+            },
+            "description": "Creates a temporary seat hold and stores holdId."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/svp/exam-reservations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  const reservationId = json.reservation?.id || json.reservation_id || json.id || json.data?.reservation?.id || json.data?.reservation_id || json.data?.id;",
+                  "  if (reservationId) pm.collectionVariables.set('reservationId', String(reservationId));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"exam_session_id\": {{sessionId}},\n  \"occupation_id\": {{occupationId}},\n  \"language_code\": \"{{languageCode}}\",\n  \"site_id\": {{siteId}},\n  \"site_city\": \"{{siteCity}}\",\n  \"hold_id\": {{holdId}},\n  \"methodology\": \"{{methodology}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/svp/exam-reservations",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "svp", "exam-reservations" ]
+            },
+            "description": "Books the reservation. If you skip the hold step, set holdId to null manually before sending."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Payment",
+      "item": [
+        {
+          "name": "POST /api/svp/payments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  const paymentId = json.payment?.id || json.payment_id || json.id || json.data?.payment?.id || json.data?.payment_id || json.data?.id;",
+                  "  if (paymentId) pm.collectionVariables.set('paymentId', String(paymentId));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payment\": {\n    \"payment_method\": \"{{paymentMethod}}\",\n    \"payable_type\": \"Reservation\",\n    \"payable_id\": {{reservationId}}\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/svp/payments",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "svp", "payments" ]
+            },
+            "description": "Creates a payment for the reservation and stores paymentId."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /api/svp/payments/:id",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/payments/{{paymentId}}",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "svp", "payments", "{{paymentId}}" ]
+            },
+            "description": "Calls the finalize payment endpoint. The current frontend sends an empty PUT body, so this request does the same."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Validation",
+      "item": [
+        {
+          "name": "GET /api/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/me",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "me" ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/svp/payments/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/payments/{{paymentId}}",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "svp", "payments", "{{paymentId}}" ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /api/svp/user-balance/:svpUserId",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/svp/user-balance/{{svpUserId}}?methodology_type={{methodology}}&occupation_id={{occupationId}}",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "svp", "user-balance", "{{svpUserId}}" ],
+              "query": [
+                { "key": "methodology_type", "value": "{{methodology}}" },
+                { "key": "occupation_id", "value": "{{occupationId}}" }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
