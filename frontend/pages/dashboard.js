@@ -58,11 +58,11 @@ export default function DashboardPage() {
   return (
     <div className="shell">
       <div className="floating-label floating-label--left">Dashboard</div>
-      <Link className="floating-label floating-label--center" href="/exam/reservations">
-        My booking
-      </Link>
-      <Link className="floating-label floating-label--right" href="/exam/booking">
+      <Link className="floating-label floating-label--left-action" href="/exam/booking">
         new booking
+      </Link>
+      <Link className="floating-label floating-label--right-action" href="/exam/reservations">
+        My booking
       </Link>
 
       <button className="logout-top" type="button" onClick={handleLogout} disabled={loggingOut}>
@@ -131,7 +131,8 @@ export default function DashboardPage() {
           justify-content: center;
           background: #dfe4e8;
           color: #111;
-          border: 0;
+          border: 4px solid #ff2d2d;
+          box-shadow: 0 12px 28px rgba(255, 45, 45, 0.12);
           text-decoration: none;
           font-size: 18px;
           border-radius: 4px;
@@ -139,14 +140,15 @@ export default function DashboardPage() {
         .floating-label--left {
           left: 180px;
         }
-        .floating-label--center {
-          left: 50%;
-          transform: translateX(-50%);
+        .floating-label--left-action {
+          left: 280px;
           top: 190px;
+          min-width: 260px;
         }
-        .floating-label--right {
-          right: 420px;
+        .floating-label--right-action {
+          right: 280px;
           top: 190px;
+          min-width: 260px;
         }
         .logout-top {
           right: 140px;
@@ -154,6 +156,7 @@ export default function DashboardPage() {
           min-height: 54px;
           top: 18px;
           cursor: pointer;
+          background: #efefef;
         }
         .card {
           width: min(960px, 100%);
