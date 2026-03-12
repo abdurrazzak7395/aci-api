@@ -139,12 +139,16 @@ router.post('/login', async (req, res, next) => {
           recaptcha: recaptchaToken,
           recaptcha_token: recaptchaToken,
           recaptcha_response: recaptchaToken,
+          'g-recaptcha-response': recaptchaToken,
         }
       : {};
 
     await svpRequest('/api/v1/sessions/login', {
       method: 'POST',
-      body: { user: { login, password, otp_method: otpMethod, fe_app: feApp, ...captchaFields } },
+      body: {
+        user: { login, password, otp_method: otpMethod, fe_app: feApp, ...captchaFields },
+        ...captchaFields,
+      },
     });
 
     res.json({ status: 'OTP_SENT' });
@@ -163,6 +167,7 @@ router.post('/otp-verify', async (req, res, next) => {
           recaptcha: recaptchaToken,
           recaptcha_token: recaptchaToken,
           recaptcha_response: recaptchaToken,
+          'g-recaptcha-response': recaptchaToken,
         }
       : {};
 
@@ -177,6 +182,7 @@ router.post('/otp-verify', async (req, res, next) => {
           otp_method: otpMethod,
           ...captchaFields,
         },
+        ...captchaFields,
       },
     });
 
