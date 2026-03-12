@@ -6,6 +6,7 @@ export default function Login() {
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [otpMethod, setOtpMethod] = useState('email');
+  const [recaptchaToken, setRecaptchaToken] = useState('');
   const [msg, setMsg] = useState('');
   const router = useRouter();
 
@@ -21,11 +22,20 @@ export default function Login() {
     e.preventDefault();
     setMsg('Sending OTP...');
     try {
-      await api('/api/auth/login', { method: 'POST', body: { login, password, otpMethod } });
+      await api('/api/auth/login', {
+        method: 'POST',
+        body: {
+          login,
+          password,
+          otpMethod,
+          ...(recaptchaToken ? { recaptchaToken } : {}),
+        },
+      });
 
       sessionStorage.setItem('tmp_login', login);
       sessionStorage.setItem('tmp_password', password);
       sessionStorage.setItem('tmp_otpMethod', otpMethod);
+      if (recaptchaToken) sessionStorage.setItem('tmp_recaptcha', recaptchaToken);
 
       setMsg('OTP sent. Check your email or SMS.');
       router.push('/auth/otp');
@@ -65,6 +75,13 @@ export default function Login() {
             <option value="email">Email</option>
             <option value="sms">SMS</option>
           </select>
+
+          <label>Recaptcha Token (optional)</label>
+          <input
+            value={recaptchaToken}
+            onChange={(e) => setRecaptchaToken(e.target.value)}
+            placeholder="Paste SVP recaptcha token if required"
+          />
 
           <button type="submit" className="auth-submit">Sign in</button>
           <p className="auth-message">{msg}</p>

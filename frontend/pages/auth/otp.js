@@ -9,6 +9,7 @@ export default function Otp() {
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [otpMethod, setOtpMethod] = useState('email');
+  const [recaptchaToken, setRecaptchaToken] = useState('');
   const [otpAttempt, setOtpAttempt] = useState('');
   const [msg, setMsg] = useState('');
 
@@ -16,10 +17,12 @@ export default function Otp() {
     const storedLogin = typeof window !== 'undefined' ? sessionStorage.getItem('tmp_login') : '';
     const storedPassword = typeof window !== 'undefined' ? sessionStorage.getItem('tmp_password') : '';
     const storedOtpMethod = typeof window !== 'undefined' ? sessionStorage.getItem('tmp_otpMethod') : 'email';
+    const storedRecaptcha = typeof window !== 'undefined' ? sessionStorage.getItem('tmp_recaptcha') : '';
 
     setLogin(String(queryLogin || storedLogin || ''));
     setPassword(String(queryPassword || storedPassword || ''));
     setOtpMethod(String(queryOtpMethod || storedOtpMethod || 'email'));
+    setRecaptchaToken(String(storedRecaptcha || ''));
   }, [queryLogin, queryPassword, queryOtpMethod]);
 
   async function verify(e) {
@@ -28,13 +31,20 @@ export default function Otp() {
     try {
       const res = await api('/api/auth/otp-verify', {
         method: 'POST',
-        body: { login, password, otpAttempt, otpMethod },
+        body: {
+          login,
+          password,
+          otpAttempt,
+          otpMethod,
+          ...(recaptchaToken ? { recaptchaToken } : {}),
+        },
       });
 
       localStorage.setItem('accessToken', res.accessToken);
       sessionStorage.removeItem('tmp_login');
       sessionStorage.removeItem('tmp_password');
       sessionStorage.removeItem('tmp_otpMethod');
+      sessionStorage.removeItem('tmp_recaptcha');
 
       setMsg('Login successful. Redirecting to dashboard...');
       router.push('/dashboard');
@@ -59,6 +69,13 @@ export default function Otp() {
         </div>
 
         <form className="auth-form" onSubmit={verify}>
+          <label>Recaptcha Token (optional)</label>
+          <input
+            value={recaptchaToken}
+            onChange={(e) => setRecaptchaToken(e.target.value)}
+            placeholder="Paste SVP recaptcha token if required"
+          />
+
           <label>OTP Code</label>
           <input
             value={otpAttempt}
