@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { api } from '../../lib/api';
-import RecaptchaWidget from '../../components/RecaptchaWidget';
+import { executeRecaptcha } from '../../lib/recaptcha';
 
 export default function Login() {
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [otpMethod, setOtpMethod] = useState('email');
-  const [recaptchaToken, setRecaptchaToken] = useState('');
   const [msg, setMsg] = useState('');
   const router = useRouter();
 
@@ -21,8 +20,10 @@ export default function Login() {
 
   async function submit(e) {
     e.preventDefault();
-    setMsg('Sending OTP...');
+    setMsg('Verifying recaptcha...');
     try {
+      const recaptchaToken = await executeRecaptcha('svp_login');
+      setMsg('Sending OTP...');
       await api('/api/auth/login', {
         method: 'POST',
         body: {
@@ -76,9 +77,6 @@ export default function Login() {
             <option value="email">Email</option>
             <option value="sms">SMS</option>
           </select>
-
-          <label>Recaptcha</label>
-          <RecaptchaWidget onToken={setRecaptchaToken} />
 
           <button type="submit" className="auth-submit">Sign in</button>
           <p className="auth-message">{msg}</p>

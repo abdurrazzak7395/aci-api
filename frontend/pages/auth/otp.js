@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { api } from '../../lib/api';
-import RecaptchaWidget from '../../components/RecaptchaWidget';
+import { executeRecaptcha } from '../../lib/recaptcha';
 
 export default function Otp() {
   const router = useRouter();
@@ -10,7 +10,6 @@ export default function Otp() {
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [otpMethod, setOtpMethod] = useState('email');
-  const [recaptchaToken, setRecaptchaToken] = useState('');
   const [otpAttempt, setOtpAttempt] = useState('');
   const [msg, setMsg] = useState('');
 
@@ -18,18 +17,18 @@ export default function Otp() {
     const storedLogin = typeof window !== 'undefined' ? sessionStorage.getItem('tmp_login') : '';
     const storedPassword = typeof window !== 'undefined' ? sessionStorage.getItem('tmp_password') : '';
     const storedOtpMethod = typeof window !== 'undefined' ? sessionStorage.getItem('tmp_otpMethod') : 'email';
-    const storedRecaptcha = typeof window !== 'undefined' ? sessionStorage.getItem('tmp_recaptcha') : '';
 
     setLogin(String(queryLogin || storedLogin || ''));
     setPassword(String(queryPassword || storedPassword || ''));
     setOtpMethod(String(queryOtpMethod || storedOtpMethod || 'email'));
-    setRecaptchaToken(String(storedRecaptcha || ''));
   }, [queryLogin, queryPassword, queryOtpMethod]);
 
   async function verify(e) {
     e.preventDefault();
-    setMsg('Verifying...');
+    setMsg('Verifying recaptcha...');
     try {
+      const recaptchaToken = await executeRecaptcha('svp_otp_verify');
+      setMsg('Verifying OTP...');
       const res = await api('/api/auth/otp-verify', {
         method: 'POST',
         body: {
@@ -70,9 +69,6 @@ export default function Otp() {
         </div>
 
         <form className="auth-form" onSubmit={verify}>
-          <label>Recaptcha</label>
-          <RecaptchaWidget onToken={setRecaptchaToken} />
-
           <label>OTP Code</label>
           <input
             value={otpAttempt}
