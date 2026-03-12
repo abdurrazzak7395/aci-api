@@ -31,18 +31,47 @@ function loadScript(siteKey) {
       document.head.appendChild(script);
     }
 
-    const onLoad = () => {
-      if (window.grecaptcha && typeof window.grecaptcha.ready === 'function') {
-        resolve(window.grecaptcha);
-      } else {
-        reject(new Error('Recaptcha failed to initialize'));
-      }
+    let settled = false;
+    const done = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      fn(value);
     };
 
-    const onError = () => reject(new Error('Failed to load Recaptcha script'));
+    const tryResolve = () => {
+      if (window.grecaptcha && typeof window.grecaptcha.ready === 'function') {
+        done(resolve, window.grecaptcha);
+        return true;
+      }
+      return false;
+    };
+
+    if (tryResolve()) return;
+
+    const onLoad = () => {
+      // Script may be loaded but grecaptcha can initialize a bit later.
+      const start = Date.now();
+      const timer = setInterval(() => {
+        if (tryResolve()) {
+          clearInterval(timer);
+          return;
+        }
+        if (Date.now() - start > 15000) {
+          clearInterval(timer);
+          done(reject, new Error('Recaptcha failed to initialize'));
+        }
+      }, 100);
+    };
+
+    const onError = () => done(reject, new Error('Failed to load Recaptcha script'));
 
     script.addEventListener('load', onLoad, { once: true });
     script.addEventListener('error', onError, { once: true });
+
+    // If script was already loaded before listeners were attached.
+    if (script.readyState === 'complete' || script.readyState === 'loaded') {
+      onLoad();
+    }
   });
 }
 
@@ -54,17 +83,22 @@ export async function executeRecaptcha(action = 'login') {
 
   const grecaptcha = await loadScript(siteKey);
   return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Recaptcha timed out')), 20000);
     grecaptcha.ready(() => {
       grecaptcha
         .execute(siteKey, { action })
         .then((token) => {
+          clearTimeout(timeout);
           if (!token) {
             reject(new Error('Recaptcha token is empty'));
             return;
           }
           resolve(token);
         })
-        .catch(() => reject(new Error('Recaptcha execute failed')));
+        .catch(() => {
+          clearTimeout(timeout);
+          reject(new Error('Recaptcha execute failed'));
+        });
     });
   });
 }
