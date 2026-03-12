@@ -138,6 +138,8 @@ router.post('/login', async (req, res, next) => {
       ? {
           recaptcha: recaptchaToken,
           recaptcha_token: recaptchaToken,
+          recaptcha_v3: recaptchaToken,
+          recaptcha_v3_token: recaptchaToken,
           recaptcha_response: recaptchaToken,
           'g-recaptcha-response': recaptchaToken,
         }
@@ -166,6 +168,8 @@ router.post('/otp-verify', async (req, res, next) => {
       ? {
           recaptcha: recaptchaToken,
           recaptcha_token: recaptchaToken,
+          recaptcha_v3: recaptchaToken,
+          recaptcha_v3_token: recaptchaToken,
           recaptcha_response: recaptchaToken,
           'g-recaptcha-response': recaptchaToken,
         }

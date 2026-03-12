@@ -1,7 +1,12 @@
 const SCRIPT_ID = 'google-recaptcha-v3-script';
 
 function getSiteKey() {
-  return (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || '').trim();
+  const envKey = (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || '').trim();
+  if (envKey) return envKey;
+
+  // Public site key fallback from SVP production config.
+  // Keeps login flow working if Vercel env was not set yet.
+  return '6LdhZ_IUAAAAABjY17EoRq8fLJSj8dtNgcMeddrr';
 }
 
 function loadScript(siteKey) {
