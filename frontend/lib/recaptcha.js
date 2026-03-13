@@ -124,3 +124,11 @@ export async function executeRecaptcha(action = 'login') {
     });
   });
 }
+
+export async function executeRecaptchaSafe(action = 'login') {
+  try {
+    return await executeRecaptcha(action);
+  } catch {
+    return null;
+  }
+}
