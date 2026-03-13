@@ -8,7 +8,6 @@ import { signAccess } from '../lib/jwt.js';
 import { svpRequest } from '../lib/svpClient.js';
 
 const router = Router();
-const requirePortalApproval = String(process.env.REQUIRE_PORTAL_APPROVAL || 'false') === 'true';
 
 function pickFirst(...values) {
   for (const value of values) {
@@ -46,97 +45,80 @@ function extractOtpPayload(data) {
   return { token, accessExpiresAt, user };
 }
 
-const PortalLoginSchema = z.object({
+const LoginInputSchema = z.object({
   login: z.string().min(3),
   password: z.string().min(3),
-});
-
-const LoginSchema = z.object({
-  login: z.string().min(3),
-  password: z.string().min(3),
-  otpMethod: z.enum(['email', 'sms']).default('email'),
+  otpMethod: z.enum(['email', 'sms']).optional(),
   recaptchaToken: z.string().min(1).optional(),
   recaptchaResponse: z.string().min(1).optional(),
+  recaptcha_token: z.string().min(1).optional(),
+  recaptcha_response: z.string().min(1).optional(),
+  fe_app: z.string().min(1).optional(),
 });
 
-const OtpSchema = z.object({
+const OtpInputSchema = z.object({
   login: z.string().min(3),
   password: z.string().min(3),
-  otpAttempt: z.string().min(4).max(10),
-  otpMethod: z.enum(['email', 'sms']).default('email'),
+  otpAttempt: z.string().min(4).max(10).optional(),
+  otp_attempt: z.string().min(4).max(10).optional(),
+  otpMethod: z.enum(['email', 'sms']).optional(),
+  otp_method: z.enum(['email', 'sms']).optional(),
   recaptchaToken: z.string().min(1).optional(),
   recaptchaResponse: z.string().min(1).optional(),
+  recaptcha_token: z.string().min(1).optional(),
+  recaptcha_response: z.string().min(1).optional(),
+  fe_app: z.string().min(1).optional(),
+}).refine((v) => Boolean(v.otpAttempt || v.otp_attempt), {
+  message: 'otpAttempt (or otp_attempt) is required',
 });
 
-async function assertApprovedPortalUser(login, password) {
-  const user = await prisma.user.findUnique({ where: { login } });
-  if (!user || !user.passwordHash) {
-    const err = new Error('No approved portal account found for this user');
-    err.statusCode = 403;
-    throw err;
-  }
+const LoginSchema = z.union([
+  LoginInputSchema,
+  z.object({ user: LoginInputSchema }),
+]);
 
-  if (!user.isApproved) {
-    const err = new Error('Your account is not approved yet');
-    err.statusCode = 403;
-    throw err;
-  }
+const OtpSchema = z.union([
+  OtpInputSchema,
+  z.object({ user: OtpInputSchema }),
+]);
 
-  const ok = await bcrypt.compare(password, user.passwordHash);
-  if (!ok) {
-    const err = new Error('Invalid username or password');
-    err.statusCode = 401;
-    throw err;
-  }
-
-  return user;
+function normalizeLoginBody(payload) {
+  const input = payload.user ? payload.user : payload;
+  return {
+    login: input.login,
+    password: input.password,
+    otpMethod: input.otpMethod || input.otp_method || 'email',
+    recaptcha: pickFirst(
+      input.recaptchaResponse,
+      input.recaptcha_response,
+      input.recaptchaToken,
+      input.recaptcha_token,
+    ),
+    feApp: input.fe_app || process.env.SVP_FE_APP || 'legislator',
+  };
 }
 
-async function resolvePortalUserForSvpLogin(login, password) {
-  if (requirePortalApproval) {
-    return assertApprovedPortalUser(login, password);
-  }
-  return prisma.user.findUnique({ where: { login } });
+function normalizeOtpBody(payload) {
+  const input = payload.user ? payload.user : payload;
+  return {
+    login: input.login,
+    password: input.password,
+    otpAttempt: input.otpAttempt || input.otp_attempt,
+    otpMethod: input.otpMethod || input.otp_method || 'email',
+    recaptcha: pickFirst(
+      input.recaptchaResponse,
+      input.recaptcha_response,
+      input.recaptchaToken,
+      input.recaptcha_token,
+    ),
+    feApp: input.fe_app || process.env.SVP_FE_APP || 'legislator',
+  };
 }
-
-router.post('/portal-login', async (req, res, next) => {
-  try {
-    const { login, password } = PortalLoginSchema.parse(req.body);
-    const user = await assertApprovedPortalUser(login, password);
-
-    const accessToken = signAccess({
-      sub: user.id,
-      login: user.login,
-      role: user.role,
-      approved: user.isApproved,
-      portalOnly: true,
-    });
-
-    res.json({
-      accessToken,
-      nextStep: user.role === 'ADMIN' ? 'ADMIN' : 'SVP_LOGIN',
-      user: {
-        id: user.id,
-        login: user.login,
-        email: user.email,
-        fullName: user.fullName,
-        phone: user.phone,
-        role: user.role,
-        isApproved: user.isApproved,
-      },
-    });
-  } catch (e) {
-    next(e);
-  }
-});
 
 router.post('/login', async (req, res, next) => {
   try {
-    const { login, password, otpMethod, recaptchaToken, recaptchaResponse } = LoginSchema.parse(req.body);
-    await resolvePortalUserForSvpLogin(login, password);
-
-    const feApp = process.env.SVP_FE_APP || 'legislator';
-    const recaptcha = recaptchaToken || recaptchaResponse;
+    const parsed = LoginSchema.parse(req.body);
+    const { login, password, otpMethod, recaptcha, feApp } = normalizeLoginBody(parsed);
     const userPayload = {
       login,
       password,
@@ -160,10 +142,11 @@ router.post('/login', async (req, res, next) => {
 
 router.post('/otp-verify', async (req, res, next) => {
   try {
-    const { login, password, otpAttempt, otpMethod, recaptchaToken, recaptchaResponse } = OtpSchema.parse(req.body);
-    const portalUser = await resolvePortalUserForSvpLogin(login, password);
-    const feApp = process.env.SVP_FE_APP || 'legislator';
-    const recaptcha = recaptchaToken || recaptchaResponse;
+    const parsed = OtpSchema.parse(req.body);
+    const { login, password, otpAttempt, otpMethod, recaptcha, feApp } = normalizeOtpBody(parsed);
+    if (!otpAttempt) {
+      return res.status(400).json({ message: 'otpAttempt (or otp_attempt) is required' });
+    }
     const userPayload = {
       login,
       password,
@@ -191,12 +174,9 @@ router.post('/otp-verify', async (req, res, next) => {
       throw err;
     }
 
-    const svpUserId = otpPayload.user?.id ?? portalUser?.svpUserId ?? null;
-    const email = otpPayload.user?.email ?? portalUser?.email ?? null;
-    const fullName = otpPayload.user?.full_name ?? otpPayload.user?.fullName ?? portalUser?.fullName ?? null;
-    const role = portalUser?.role || 'USER';
-    const isApproved = requirePortalApproval ? Boolean(portalUser?.isApproved) : true;
-    const approvedAt = isApproved ? (portalUser?.approvedAt || new Date()) : null;
+    const svpUserId = otpPayload.user?.id ?? null;
+    const email = otpPayload.user?.email ?? null;
+    const fullName = otpPayload.user?.full_name ?? otpPayload.user?.fullName ?? null;
 
     const user = await prisma.user.upsert({
       where: { login },
@@ -204,22 +184,12 @@ router.post('/otp-verify', async (req, res, next) => {
         svpUserId,
         email,
         fullName,
-        phone: portalUser?.phone || null,
-        role,
-        isApproved,
-        approvedAt,
-        passwordHash: portalUser?.passwordHash || null,
       },
       create: {
         login,
         svpUserId,
         email,
         fullName,
-        phone: portalUser?.phone || null,
-        role,
-        isApproved,
-        approvedAt,
-        passwordHash: portalUser?.passwordHash || null,
       },
     });
 
@@ -242,8 +212,6 @@ router.post('/otp-verify', async (req, res, next) => {
       sub: user.id,
       login: user.login,
       sid: session.id,
-      role: user.role,
-      approved: user.isApproved,
     });
 
     const secure = String(process.env.COOKIE_SECURE) === 'true';
@@ -272,9 +240,6 @@ router.post('/otp-verify', async (req, res, next) => {
         svpUserId,
         email,
         fullName,
-        phone: user.phone,
-        role: user.role,
-        isApproved: user.isApproved,
       },
     });
   } catch (e) {
@@ -299,8 +264,6 @@ router.post('/refresh', async (req, res, next) => {
       sub: session.user.id,
       login: session.user.login,
       sid: session.id,
-      role: session.user.role,
-      approved: session.user.isApproved,
     });
     res.json({ accessToken });
   } catch (e) {

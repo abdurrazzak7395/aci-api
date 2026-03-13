@@ -4,8 +4,15 @@ import { useRouter } from 'next/router';
 
 import { api } from '../lib/api';
 
-function getProfile(data) {
-  return data?.user || data?.data?.user || data?.data || data || null;
+function decodeJwtPayload(token) {
+  try {
+    const payload = token.split('.')[1];
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const json = atob(normalized);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
 }
 
 export default function DashboardPage() {
@@ -16,30 +23,16 @@ export default function DashboardPage() {
   const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
-    let active = true;
-
-    async function loadMe() {
-      setLoading(true);
-      setError('');
-
-      try {
-        const data = await api('/api/me');
-        if (!active) return;
-        setMe(getProfile(data));
-      } catch (err) {
-        if (!active) return;
-        setError(err?.message || 'Failed to load dashboard');
-      } finally {
-        if (active) setLoading(false);
-      }
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    if (!token) {
+      router.push('/auth/login');
+      return;
     }
 
-    loadMe();
-
-    return () => {
-      active = false;
-    };
-  }, []);
+    const payload = decodeJwtPayload(token);
+    setMe(payload ? { login: payload.login || 'User' } : { login: 'User' });
+    setLoading(false);
+  }, [router]);
 
   async function handleLogout() {
     setLoggingOut(true);
