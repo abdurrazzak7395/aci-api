@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { api } from '../../lib/api';
-import { executeRecaptcha } from '../../lib/recaptcha';
 
 export default function Login() {
   const [login, setLogin] = useState('');
@@ -20,26 +19,20 @@ export default function Login() {
 
   async function submit(e) {
     e.preventDefault();
-    setMsg('Verifying recaptcha...');
+    setMsg('Sending OTP...');
     try {
-      const recaptchaToken = await executeRecaptcha('svp_login');
-      const tokenLen = recaptchaToken ? String(recaptchaToken).length : 0;
-      if (!recaptchaToken) throw new Error('Recaptcha token missing');
-      setMsg(`Recaptcha OK (token length: ${tokenLen}). Sending OTP...`);
       await api('/api/auth/login', {
         method: 'POST',
         body: {
           login,
           password,
           otpMethod,
-          ...(recaptchaToken ? { recaptchaToken } : {}),
         },
       });
 
       sessionStorage.setItem('tmp_login', login);
       sessionStorage.setItem('tmp_password', password);
       sessionStorage.setItem('tmp_otpMethod', otpMethod);
-      if (recaptchaToken) sessionStorage.setItem('tmp_recaptcha', recaptchaToken);
 
       setMsg('OTP sent. Check your email or SMS.');
       router.push('/auth/otp');

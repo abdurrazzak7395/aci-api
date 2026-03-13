@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { api } from '../../lib/api';
-import { executeRecaptcha } from '../../lib/recaptcha';
 
 export default function Otp() {
   const router = useRouter();
@@ -25,12 +24,8 @@ export default function Otp() {
 
   async function verify(e) {
     e.preventDefault();
-    setMsg('Verifying recaptcha...');
+    setMsg('Verifying OTP...');
     try {
-      const recaptchaToken = await executeRecaptcha('svp_otp_verify');
-      const tokenLen = recaptchaToken ? String(recaptchaToken).length : 0;
-      if (!recaptchaToken) throw new Error('Recaptcha token missing');
-      setMsg(`Recaptcha OK (token length: ${tokenLen}). Verifying OTP...`);
       const res = await api('/api/auth/otp-verify', {
         method: 'POST',
         body: {
@@ -38,7 +33,6 @@ export default function Otp() {
           password,
           otpAttempt,
           otpMethod,
-          ...(recaptchaToken ? { recaptchaToken } : {}),
         },
       });
 
@@ -46,7 +40,6 @@ export default function Otp() {
       sessionStorage.removeItem('tmp_login');
       sessionStorage.removeItem('tmp_password');
       sessionStorage.removeItem('tmp_otpMethod');
-      sessionStorage.removeItem('tmp_recaptcha');
 
       setMsg('Login successful. Redirecting to dashboard...');
       router.push('/dashboard');
