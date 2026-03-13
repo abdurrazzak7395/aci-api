@@ -119,6 +119,11 @@ router.post('/login', async (req, res, next) => {
   try {
     const parsed = LoginSchema.parse(req.body);
     const { login, password, otpMethod, recaptcha, feApp } = normalizeLoginBody(parsed);
+    if (!recaptcha) {
+      return res.status(400).json({
+        message: 'recaptchaResponse (or recaptcha_response) is required for SVP login',
+      });
+    }
     const userPayload = {
       login,
       password,
