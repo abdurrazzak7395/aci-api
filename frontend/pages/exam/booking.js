@@ -32,13 +32,14 @@ function getOccupationId(item) {
 
 function normalizeOccupation(item) {
   const id = getOccupationId(item);
+  const languageSource = item?.prometric_codes || item?.category?.prometric_codes || [];
   return {
     raw: item,
     id,
     name: toOptionLabel(item),
     categoryId: item?.category_id || item?.category?.id || '',
     methodology: item?.methodology_type || item?.methodology || 'in_person',
-    languageCodes: pickArray(item?.prometric_codes).map((code) => ({
+    languageCodes: pickArray(languageSource).map((code) => ({
       code: code?.code || code?.language_code || '',
       englishName: code?.english_name || code?.name || code?.code || '',
     })),
@@ -484,6 +485,17 @@ export default function BookingPage() {
       setError('Select test center / session first');
       return;
     }
+    const sessionCodes = getPrometricCodes(selectedSession);
+    const effectiveLanguageCode =
+      languageCode ||
+      selectedOccupation?.languageCodes?.[0]?.code ||
+      sessionCodes?.[0]?.code ||
+      sessionCodes?.[0]?.language_code ||
+      '';
+    if (!effectiveLanguageCode) {
+      setError('language_code is required. Select a language before booking.');
+      return;
+    }
     setBooking(true);
     setError('');
     setStatus('');
@@ -494,7 +506,7 @@ export default function BookingPage() {
           exam_session_id: Number(sessionId),
           occupation_id: Number(selectedOccupationId),
           methodology: methodology || 'in_person',
-          language_code: languageCode || undefined,
+          language_code: effectiveLanguageCode,
           site_id: siteId ? Number(siteId) : null,
           site_city: siteCity || selectedCity || null,
           hold_id: holdId ? Number(holdId) : null,
