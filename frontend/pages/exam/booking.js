@@ -50,14 +50,23 @@ function normalizeDateValue(value) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return '';
-  return parsed.toISOString().slice(0, 10);
+  return toLocalIsoDate(parsed);
+}
+
+function toLocalIsoDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function getAvailableDateCity(item) {
   if (!item || typeof item === 'string') return '';
+  const siteCity = item.site_city;
+  const normalizedSiteCity = typeof siteCity === 'object' ? (siteCity?.name || siteCity?.city || siteCity?.english_name || '') : siteCity;
   return String(
     item.city ||
-      item.site_city ||
+      normalizedSiteCity ||
       item.site_city_name ||
       item.test_center_city ||
       item.test_center?.city ||
@@ -96,11 +105,19 @@ function getSessionId(item) {
 }
 
 function getSessionSiteId(item) {
-  return item?.site_id || item?.test_center?.site_id || item?.test_center?.id || '';
+  return item?.site_id || item?.test_center?.site_id || item?.test_center?.id || item?.site?.id || '';
 }
 
 function getSessionSiteCity(item) {
-  return item?.site_city || item?.test_center?.city || item?.city || '';
+  const siteCity = item?.site_city;
+  return (
+    (typeof siteCity === 'object' ? (siteCity?.name || siteCity?.city || siteCity?.english_name) : siteCity) ||
+    item?.test_center?.city ||
+    item?.city ||
+    item?.site_city_name ||
+    item?.test_center_city ||
+    ''
+  );
 }
 
 function getSessionCenterName(item) {
@@ -110,6 +127,10 @@ function getSessionCenterName(item) {
     item?.test_center?.test_center_name ||
     `${getSessionSiteCity(item) || 'Center'}${getSessionSiteId(item) ? ` (#${getSessionSiteId(item)})` : ''}`
   );
+}
+
+function getCenterKey(item) {
+  return String(getSessionSiteId(item) || getSessionId(item) || '');
 }
 
 function getPrometricCodes(item) {
@@ -127,7 +148,7 @@ function extractId(payload, keys) {
 function buildCenterOptions(items) {
   const map = new Map();
   items.forEach((item) => {
-    const siteId = String(getSessionSiteId(item) || '');
+    const siteId = getCenterKey(item);
     if (!siteId || map.has(siteId)) return;
     map.set(siteId, { siteId, name: getSessionCenterName(item), city: getSessionSiteCity(item) });
   });
@@ -163,7 +184,7 @@ function buildCalendarDays(activeMonth, availableDates) {
   for (let index = 0; index < leading; index += 1) items.push({ key: `empty-start-${index}`, empty: true });
   for (let day = 1; day <= total; day += 1) {
     const current = new Date(year, month, day);
-    const iso = current.toISOString().slice(0, 10);
+    const iso = toLocalIsoDate(current);
     items.push({ key: iso, iso, day, available: availableSet.has(iso) });
   }
   while (items.length % 7 !== 0) items.push({ key: `empty-end-${items.length}`, empty: true });
@@ -200,6 +221,7 @@ export default function BookingPage() {
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [creatingHold, setCreatingHold] = useState(false);
   const [booking, setBooking] = useState(false);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
 
@@ -211,12 +233,15 @@ export default function BookingPage() {
   const cityOptions = useMemo(() => buildCityOptions(availableDateEntries), [availableDateEntries]);
   const availableDates = useMemo(() => buildDateOptions(availableDateEntries, selectedCity), [availableDateEntries, selectedCity]);
   const cityFilteredSessions = useMemo(
-    () => (selectedCity ? sessions.filter((item) => String(getSessionSiteCity(item)) === String(selectedCity)) : sessions),
+    () =>
+      (selectedCity
+        ? sessions.filter((item) => String(getSessionSiteCity(item)).trim().toLowerCase() === String(selectedCity).trim().toLowerCase())
+        : sessions),
     [sessions, selectedCity]
   );
   const centerOptions = useMemo(() => buildCenterOptions(cityFilteredSessions), [cityFilteredSessions]);
   const filteredSessions = useMemo(
-    () => (selectedCenterId ? cityFilteredSessions.filter((item) => String(getSessionSiteId(item)) === String(selectedCenterId)) : cityFilteredSessions),
+    () => (selectedCenterId ? cityFilteredSessions.filter((item) => getCenterKey(item) === String(selectedCenterId)) : cityFilteredSessions),
     [cityFilteredSessions, selectedCenterId]
   );
   const selectedSession = useMemo(
@@ -227,6 +252,18 @@ export default function BookingPage() {
     () => buildCalendarDays(calendarMonth || availableDate || normalizeDateValue(new Date().toISOString()), availableDates),
     [calendarMonth, availableDate, availableDates]
   );
+  const calendarBaseMonth = calendarMonth || (availableDate ? availableDate.slice(0, 7) : normalizeDateValue(new Date().toISOString()).slice(0, 7));
+  const calendarCursorDate = useMemo(() => new Date(`${calendarBaseMonth}-01T00:00:00`), [calendarBaseMonth]);
+  const calendarYear = calendarCursorDate.getFullYear();
+  const calendarYearOptions = useMemo(() => {
+    const years = availableDates.map((item) => Number(String(item).slice(0, 4))).filter((item) => Number.isInteger(item));
+    const fallback = new Date().getFullYear();
+    const minYear = years.length ? Math.min(...years) : fallback;
+    const maxYear = years.length ? Math.max(...years) : fallback + 1;
+    const options = [];
+    for (let year = minYear; year <= maxYear; year += 1) options.push(year);
+    return options.length ? options : [fallback, fallback + 1];
+  }, [availableDates]);
 
   useEffect(() => {
     async function loadOccupations() {
@@ -336,6 +373,12 @@ export default function BookingPage() {
   }, [availableDates]);
 
   useEffect(() => {
+    if (!selectedCity || !availableDates.length) {
+      setIsDatePickerOpen(false);
+    }
+  }, [selectedCity, availableDates.length]);
+
+  useEffect(() => {
     let active = true;
     async function loadSessions() {
       if (!selectedCity || !availableDate || !categoryId) {
@@ -415,9 +458,8 @@ export default function BookingPage() {
       const data = await api('/api/svp/temporary-seats', {
         method: 'POST',
         body: {
-          exam_session_id: Number(sessionId),
-          methodology_type: methodology || 'in_person',
-          language_code: languageCode || undefined,
+          exam_session_id: [Number(sessionId)],
+          methodology: methodology || 'in_person',
         },
       });
       const nextHoldId = extractId(data, ['id', 'hold_id', 'temporary_seat_id']);
@@ -444,9 +486,11 @@ export default function BookingPage() {
         body: {
           exam_session_id: Number(sessionId),
           occupation_id: Number(selectedOccupationId),
-          methodology_type: methodology || 'in_person',
+          methodology: methodology || 'in_person',
           language_code: languageCode || undefined,
-          temporary_seat_id: holdId ? Number(holdId) : undefined,
+          site_id: siteId ? Number(siteId) : null,
+          site_city: siteCity || selectedCity || null,
+          hold_id: holdId ? Number(holdId) : null,
         },
       });
       const nextReservationId = extractId(data, ['id', 'reservation_id', 'exam_reservation_id']);
@@ -459,267 +503,447 @@ export default function BookingPage() {
     }
   }
 
+  function shiftCalendarMonth(delta) {
+    const base = new Date(`${calendarBaseMonth}-01T00:00:00`);
+    base.setMonth(base.getMonth() + delta);
+    setCalendarMonth(`${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}`);
+  }
+
+  function pickDateFromCalendar(nextDate) {
+    setAvailableDate(nextDate);
+    setCalendarMonth(nextDate.slice(0, 7));
+    setIsDatePickerOpen(false);
+  }
+
   return (
-    <div className="page-shell">
-      <header className="topbar">
-        <div className="topbar__brand">
-          <div className="brand-mark" />
-          <span>Professional Accreditation</span>
-        </div>
-        <div className="topbar__actions">
-          <Link href="/dashboard">Dashboard</Link>
-          <Link href="/exam/reservations">My bookings</Link>
-        </div>
-      </header>
-
-      <main className="page-body">
-        <div className="page-head">
-          <Link className="back-link" href="/dashboard">
-            Back to dashboard
+    <div className="booking-shell">
+      <div className="booking-modal">
+        <div className="modal-head">
+          <h1>Create New Booking</h1>
+          <Link href="/dashboard" className="close-link" aria-label="Close">
+            x
           </Link>
-          <div className="head-actions">
-            <button className="ghost-btn" type="button" onClick={createHold} disabled={creatingHold || !sessionId}>
-              {creatingHold ? 'Creating hold...' : 'Create hold'}
-            </button>
-            <button className="primary-btn" type="button" onClick={bookReservation} disabled={booking || !sessionId}>
-              {booking ? 'Booking...' : 'Book now'}
-            </button>
-          </div>
         </div>
-
-        <div className="booking-no">
-          Booking No. <strong>{reservationId || holdId || '-'}</strong>
+        <div className="modal-meta-links">
+          <Link href="/exam/reservations">My bookings</Link>
+          <Link href="/dashboard">Dashboard</Link>
         </div>
 
         {status ? <div className="notice notice--ok">{status}</div> : null}
         {error ? <div className="notice notice--error">{error}</div> : null}
 
-        <section className="detail-card">
-          <div className="detail-card__title">Booking details</div>
+        <div className="form-grid">
+          <div className="field-block">
+            <span>PACC Credential *</span>
+            <div className="readonly-value">Using current logged-in SVP session</div>
+          </div>
 
-          <div className="step-grid">
-            <div className="step-card">
-              <small>Step 1</small>
-              <strong>Choose occupation</strong>
-              <select value={selectedOccupationId} onChange={(e) => setSelectedOccupationId(e.target.value)}>
-                <option value="">{loadingOccupations ? 'Loading occupations...' : 'Select occupation'}</option>
-                {occupations.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} {item.id ? `(#${item.id})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="field-block">
+            <span>Occupation *</span>
+            <select value={selectedOccupationId} onChange={(e) => setSelectedOccupationId(e.target.value)}>
+              <option value="">{loadingOccupations ? 'Loading occupations...' : 'Select occupation'}</option>
+              {occupations.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            {selectedOccupationId ? (
-              <div className="step-card">
-                <small>Step 2</small>
-                <strong>Select city</strong>
-                <select value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)}>
-                  <option value="">Select city</option>
-                  {cityOptions.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
+          <div className="field-block">
+            <span>City *</span>
+            <select value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)} disabled={!selectedOccupationId}>
+              <option value="">Select city</option>
+              {cityOptions.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            {selectedCity ? (
-              <div className="step-card">
-                <small>Step 3</small>
-                <strong>Select date</strong>
-                <input
-                  type="date"
-                  value={availableDate}
-                  onChange={(e) => {
-                    setAvailableDate(e.target.value);
-                    setCalendarMonth(e.target.value ? e.target.value.slice(0, 7) : '');
-                  }}
-                  disabled={loadingDates || !availableDates.length}
-                />
-                {!loadingDates && selectedCity && !availableDates.length ? (
-                  <small style={{ color: '#b13d3d', display: 'block', marginTop: '4px' }}>
-                    No available dates found yet. Try another city, occupation, or wait a moment and refresh.
-                  </small>
-                ) : null}
+          <div className="field-block field-block--datepicker">
+            <span>Available Date *</span>
+            <button
+              type="button"
+              className="date-trigger"
+              onClick={() => setIsDatePickerOpen((prev) => !prev)}
+              disabled={loadingDates || !availableDates.length || !selectedCity}
+            >
+              <span>{availableDate ? formatDateLabel(availableDate) : 'Select available date...'}</span>
+              <span className="date-trigger__icon">[]</span>
+            </button>
+            {isDatePickerOpen && selectedCity && availableDates.length ? (
+              <div className="date-popup">
+                <div className="date-popup__head">
+                  <strong>Select Date</strong>
+                  <button type="button" className="icon-btn" onClick={() => setIsDatePickerOpen(false)}>
+                    x
+                  </button>
+                </div>
+                <div className="date-popup__toolbar">
+                  <button type="button" className="icon-btn" onClick={() => shiftCalendarMonth(-1)}>
+                    {'<'}
+                  </button>
+                  <select
+                    className="toolbar-select"
+                    value={calendarCursorDate.getMonth()}
+                    onChange={(e) => {
+                      const next = new Date(calendarCursorDate);
+                      next.setMonth(Number(e.target.value));
+                      setCalendarMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
+                    }}
+                  >
+                    {Array.from({ length: 12 }, (_, index) => (
+                      <option key={index} value={index}>
+                        {new Date(2000, index, 1).toLocaleDateString('en-US', { month: 'long' })}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="toolbar-select"
+                    value={calendarYear}
+                    onChange={(e) => {
+                      const next = new Date(calendarCursorDate);
+                      next.setFullYear(Number(e.target.value));
+                      setCalendarMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
+                    }}
+                  >
+                    {calendarYearOptions.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" className="icon-btn" onClick={() => shiftCalendarMonth(1)}>
+                    {'>'}
+                  </button>
+                </div>
+                <div className="calendar-weekdays">
+                  <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+                </div>
+                <div className="calendar-grid">
+                  {calendarDays.map((item) =>
+                    item.empty ? (
+                      <div key={item.key} className="calendar-cell calendar-cell--empty" />
+                    ) : (
+                      <button
+                        key={item.key}
+                        type="button"
+                        className={`calendar-cell${item.available ? ' calendar-cell--available' : ''}${item.iso === availableDate ? ' calendar-cell--active' : ''}`}
+                        onClick={() => item.available && pickDateFromCalendar(item.iso)}
+                        disabled={!item.available}
+                      >
+                        <span>{item.day}</span>
+                      </button>
+                    )
+                  )}
+                </div>
               </div>
             ) : null}
           </div>
 
-          {selectedCity && availableDates.length ? (
-            <div className="calendar-wrap">
-              <div className="calendar-head">
-                <strong>
-                  {new Date(`${calendarMonth || availableDates[0].slice(0, 7)}-01T00:00:00`).toLocaleDateString('en-US', {
-                    month: 'long',
-                    year: 'numeric',
-                  })}
-                </strong>
-                <input className="calendar-month" type="month" value={calendarMonth || availableDates[0].slice(0, 7)} onChange={(e) => setCalendarMonth(e.target.value)} />
-              </div>
-              <div className="calendar-weekdays">
-                <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
-              </div>
-              <div className="calendar-grid">
-                {calendarDays.map((item) =>
-                  item.empty ? (
-                    <div key={item.key} className="calendar-cell calendar-cell--empty" />
-                  ) : (
-                    <button
-                      key={item.key}
-                      type="button"
-                      className={`calendar-cell${item.available ? ' calendar-cell--available' : ''}${item.iso === availableDate ? ' calendar-cell--active' : ''}`}
-                      onClick={() => item.available && setAvailableDate(item.iso)}
-                      disabled={!item.available}
-                    >
-                      <span>{item.day}</span>
-                      {item.available ? <small>Seat</small> : <small>-</small>}
-                    </button>
-                  )
-                )}
-              </div>
-            </div>
+          {!loadingDates && selectedCity && !availableDates.length ? (
+            <small className="error-text">
+              No available dates found yet. Try another city or occupation.
+            </small>
           ) : null}
 
-          {availableDate ? (
-            <div className="detail-grid">
-              <div className="field-block">
-                <span>Occupation Code</span>
-                <input value={selectedOccupation?.id || ''} readOnly />
-              </div>
-              <div className="field-block">
-                <span>Category ID</span>
-                <input value={categoryId} readOnly />
-              </div>
-              <div className="field-block">
-                <span>Methodology</span>
-                <input value={methodology === 'in_person' ? 'Direct Assessment' : methodology} readOnly />
-              </div>
-              <div className="field-block">
-                <span>Language</span>
-                <select value={languageCode} onChange={(e) => setLanguageCode(e.target.value)}>
-                  <option value="">Select language</option>
-                  {selectedOccupation?.languageCodes.map((item) => (
-                    <option key={item.code} value={item.code}>
-                      {item.englishName} {item.code ? `(${item.code})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="field-block">
-                <span>Test center</span>
-                <select value={selectedCenterId} onChange={(e) => setSelectedCenterId(e.target.value)} disabled={!centerOptions.length}>
-                  <option value="">{loadingSessions ? 'Loading centers...' : 'Select test center'}</option>
-                  {centerOptions.map((item) => (
-                    <option key={item.siteId} value={item.siteId}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="field-block">
-                <span>Session</span>
-                <select value={sessionId} onChange={(e) => setSessionId(e.target.value)} disabled={!filteredSessions.length}>
-                  <option value="">{loadingSessions ? 'Loading sessions...' : 'Select session'}</option>
-                  {filteredSessions.map((item) => (
-                    <option key={getSessionId(item)} value={getSessionId(item)}>
-                      {getSessionCenterName(item)} | Session #{getSessionId(item)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="field-block">
-                <span>Selected City</span>
-                <input value={siteCity || selectedCity} readOnly />
-              </div>
-              <div className="field-block">
-                <span>Site ID</span>
-                <input value={siteId} readOnly />
-              </div>
-              <div className="field-block">
-                <span>Hold ID</span>
-                <input value={holdId} readOnly />
-              </div>
-              <div className="field-block">
-                <span>Reservation ID</span>
-                <input value={reservationId} readOnly />
-              </div>
-            </div>
-          ) : null}
-
-          {selectedCity && availableDates.length ? (
-            <div className="chips">
-              {availableDates.map((item) => (
-                <button
-                  key={item}
-                  className={`chip${item === availableDate ? ' chip--active' : ''}`}
-                  type="button"
-                  onClick={() => {
-                    setAvailableDate(item);
-                    setCalendarMonth(item.slice(0, 7));
-                  }}
-                >
-                  {formatDateLabel(item)}
-                </button>
+          <div className="field-block">
+            <span>Test Center *</span>
+            <select value={selectedCenterId} onChange={(e) => setSelectedCenterId(e.target.value)} disabled={!centerOptions.length}>
+              <option value="">{loadingSessions ? 'Loading centers...' : 'Select test center'}</option>
+              {centerOptions.map((item) => (
+                <option key={item.siteId} value={item.siteId}>
+                  {item.name}
+                </option>
               ))}
-            </div>
-          ) : null}
-        </section>
-      </main>
+            </select>
+          </div>
+
+          <div className="field-block">
+            <span>Exam Session *</span>
+            <select value={sessionId} onChange={(e) => setSessionId(e.target.value)} disabled={!filteredSessions.length}>
+              <option value="">{loadingSessions ? 'Loading sessions...' : 'Select session'}</option>
+              {filteredSessions.map((item) => (
+                <option key={getSessionId(item)} value={getSessionId(item)}>
+                  {getSessionCenterName(item)} | Session #{getSessionId(item)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field-block">
+            <span>Language *</span>
+            <select value={languageCode} onChange={(e) => setLanguageCode(e.target.value)}>
+              <option value="">Select language</option>
+              {selectedOccupation?.languageCodes.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.englishName} {item.code ? `(${item.code})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="meta-grid">
+          <div><span>City:</span> <strong>{siteCity || selectedCity || '-'}</strong></div>
+          <div><span>Site ID:</span> <strong>{siteId || '-'}</strong></div>
+          <div><span>Hold ID:</span> <strong>{holdId || '-'}</strong></div>
+          <div><span>Booking No:</span> <strong>{reservationId || '-'}</strong></div>
+        </div>
+
+        <div className="actions-row">
+          <button className="ghost-btn" type="button" onClick={createHold} disabled={creatingHold || !sessionId}>
+            {creatingHold ? 'Creating hold...' : 'Create Hold'}
+          </button>
+          <button className="primary-btn" type="button" onClick={bookReservation} disabled={booking || !sessionId}>
+            {booking ? 'Booking...' : 'Book Now'}
+          </button>
+        </div>
+      </div>
 
       <style jsx>{`
-        .page-shell { min-height: 100vh; background: #f4f6f8; color: #22324d; }
-        .topbar { min-height: 58px; padding: 0 28px; display: flex; align-items: center; justify-content: space-between; background: #fff; border-bottom: 1px solid #d9e0e7; }
-        .topbar__brand { display: flex; align-items: center; gap: 10px; color: #127d87; font-weight: 700; }
-        .brand-mark { width: 40px; height: 24px; border-radius: 0 20px 20px 20px; background: linear-gradient(135deg, #0b8c93 0%, #f49a20 100%); }
-        .topbar__actions { display: flex; gap: 18px; }
-        .topbar__actions a { color: #637084; text-decoration: none; font-weight: 600; }
-        .page-body { padding: 44px 24px 60px; }
-        .page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
-        .back-link { color: #0b7f8a; text-decoration: none; font-size: 16px; font-weight: 700; }
-        .head-actions { display: flex; gap: 10px; }
-        .ghost-btn, .primary-btn { min-height: 42px; padding: 0 18px; border-radius: 6px; border: 1px solid #ccd5de; background: #fff; color: #1a607c; cursor: pointer; font-weight: 700; }
-        .primary-btn { background: #13828c; border-color: #13828c; color: #fff; }
-        .booking-no { margin-bottom: 18px; color: #748095; font-size: 17px; }
-        .booking-no strong { color: #22324d; font-size: 18px; }
-        .notice { margin-bottom: 14px; padding: 14px 16px; border-radius: 10px; }
-        .notice--ok { background: #ebfaf4; color: #1a7d4d; }
-        .notice--error { background: #fff1f1; color: #b13d3d; }
-        .detail-card { background: #fff; border: 1px solid #cfd7df; border-radius: 14px; overflow: hidden; }
-        .detail-card__title { padding: 14px 18px; border-bottom: 1px solid #dbe2e9; font-size: 18px; font-weight: 800; color: #111; }
-        .step-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; padding: 22px 24px 8px; }
-        .step-card { padding: 18px; border: 1px solid #d8e0e8; border-radius: 12px; background: #fbfcfd; display: flex; flex-direction: column; gap: 10px; }
-        .step-card small { color: #13828c; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
-        .step-card strong { color: #22324d; }
-        .step-card select, .step-card input { min-height: 44px; border-radius: 6px; border: 1px solid #cfd7df; background: #fff; color: #24324d; padding: 0 12px; }
-        .calendar-wrap { padding: 8px 24px 8px; }
-        .calendar-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-        .calendar-month { min-height: 38px; padding: 0 10px; border-radius: 6px; border: 1px solid #ccd5de; }
-        .calendar-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin-top: 14px; color: #6c788b; font-size: 12px; font-weight: 700; }
-        .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
-        .calendar-cell { min-height: 68px; border-radius: 10px; border: 1px solid #d5dde6; background: #f6f8fa; color: #7f8a9c; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 10px; cursor: not-allowed; }
-        .calendar-cell span { font-weight: 700; }
-        .calendar-cell small { font-size: 11px; }
-        .calendar-cell--empty { border: 0; background: transparent; }
-        .calendar-cell--available { background: #ebfaf4; border-color: #a8d9bf; color: #156d44; cursor: pointer; }
-        .calendar-cell--active { background: #13828c; border-color: #13828c; color: #fff; }
-        .detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 26px; padding: 16px 24px 24px; }
-        .field-block { display: flex; flex-direction: column; gap: 8px; }
-        .field-block span { color: #68758a; font-size: 14px; }
-        .field-block input, .field-block select { min-height: 44px; border-radius: 6px; border: 1px solid #cfd7df; background: #fff; color: #24324d; padding: 0 12px; }
-        .field-block select:disabled, .field-block input:disabled { background: #f5f7f9; color: #8d97a8; }
-        .chips { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 24px 24px; }
-        .chip { min-height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid #ccd5de; background: #fff; color: #24405b; cursor: pointer; font-weight: 700; }
-        .chip--active { background: #13828c; border-color: #13828c; color: #fff; }
-        @media (max-width: 960px) {
-          .step-grid, .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .booking-shell {
+          min-height: 100vh;
+          padding: 18px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background:
+            radial-gradient(circle at 20% 10%, rgba(22, 203, 161, 0.08), transparent 30%),
+            radial-gradient(circle at 80% 90%, rgba(20, 116, 237, 0.12), transparent 35%),
+            #070d19;
+          color: #d9e4ff;
         }
-        @media (max-width: 720px) {
-          .topbar, .page-head, .head-actions { flex-direction: column; align-items: stretch; }
-          .step-grid, .detail-grid { grid-template-columns: 1fr; }
-          .calendar-weekdays, .calendar-grid { grid-template-columns: repeat(7, minmax(32px, 1fr)); }
+        .booking-modal {
+          width: min(760px, 100%);
+          border-radius: 16px;
+          padding: 18px;
+          background: linear-gradient(180deg, #1a2a42 0%, #1a2740 100%);
+          border: 1px solid rgba(148, 163, 184, 0.25);
+          box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+          position: relative;
+        }
+        .modal-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 8px;
+        }
+        .modal-head h1 {
+          margin: 0;
+          font-size: 24px;
+          letter-spacing: 0.02em;
+        }
+        .close-link {
+          text-decoration: none;
+          color: #99aacd;
+          font-weight: 700;
+          font-size: 20px;
+        }
+        .modal-meta-links {
+          display: flex;
+          gap: 12px;
+          margin-bottom: 14px;
+        }
+        .modal-meta-links a {
+          color: #8fdcff;
+          text-decoration: none;
+          font-size: 13px;
+        }
+        .notice {
+          margin-bottom: 12px;
+          padding: 10px 12px;
+          border-radius: 10px;
+          font-size: 13px;
+        }
+        .notice--ok { background: rgba(22, 163, 74, 0.2); color: #7cf2ae; }
+        .notice--error { background: rgba(239, 68, 68, 0.18); color: #ffabab; }
+        .form-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+        .field-block {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          position: relative;
+        }
+        .field-block span {
+          font-size: 13px;
+          color: #b7c6e6;
+          font-weight: 700;
+        }
+        .readonly-value,
+        .field-block input,
+        .field-block select,
+        .date-trigger {
+          min-height: 46px;
+          border-radius: 10px;
+          border: 1px solid rgba(123, 145, 184, 0.45);
+          background: #031130;
+          color: #f1f6ff;
+          padding: 0 12px;
+          font-size: 16px;
+          width: 100%;
+        }
+        .readonly-value {
+          display: flex;
+          align-items: center;
+          color: #c2d5ff;
+        }
+        .date-trigger {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          text-align: left;
+          cursor: pointer;
+        }
+        .date-trigger:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+        .date-trigger__icon {
+          font-size: 13px;
+          color: #84d6e9;
+          letter-spacing: -0.1em;
+        }
+        .field-block--datepicker {
+          z-index: 5;
+        }
+        .date-popup {
+          position: absolute;
+          left: 0;
+          top: calc(100% + 8px);
+          width: min(420px, 96vw);
+          border-radius: 12px;
+          background: #1f2e45;
+          border: 1px solid rgba(110, 128, 159, 0.6);
+          padding: 12px;
+          box-shadow: 0 24px 50px rgba(0, 0, 0, 0.55);
+        }
+        .date-popup__head {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 8px;
+        }
+        .date-popup__toolbar {
+          display: grid;
+          grid-template-columns: 34px 1fr 88px 34px;
+          gap: 6px;
+          margin-bottom: 10px;
+          align-items: center;
+        }
+        .icon-btn {
+          min-height: 32px;
+          border-radius: 8px;
+          border: 1px solid rgba(122, 142, 173, 0.5);
+          background: #11203a;
+          color: #d8e8ff;
+          cursor: pointer;
+        }
+        .toolbar-select {
+          min-height: 32px;
+          border-radius: 8px;
+          border: 1px solid rgba(122, 142, 173, 0.5);
+          background: #11203a;
+          color: #d8e8ff;
+          padding: 0 8px;
+        }
+        .calendar-weekdays {
+          display: grid;
+          grid-template-columns: repeat(7, minmax(0, 1fr));
+          gap: 6px;
+          color: #9cb0d4;
+          font-size: 12px;
+          margin-bottom: 6px;
+          text-align: center;
+        }
+        .calendar-grid {
+          display: grid;
+          grid-template-columns: repeat(7, minmax(0, 1fr));
+          gap: 6px;
+        }
+        .calendar-cell {
+          min-height: 38px;
+          border-radius: 10px;
+          border: 1px solid transparent;
+          background: transparent;
+          color: #6d83ad;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: not-allowed;
+        }
+        .calendar-cell--empty { visibility: hidden; }
+        .calendar-cell--available {
+          background: rgba(52, 211, 153, 0.16);
+          border-color: rgba(94, 234, 212, 0.45);
+          color: #b8ffe5;
+          cursor: pointer;
+        }
+        .calendar-cell--active {
+          background: #8bf4c4;
+          border-color: #8bf4c4;
+          color: #163224;
+          font-weight: 800;
+        }
+        .error-text {
+          color: #ffb3b3;
+          font-size: 12px;
+          margin-top: -3px;
+        }
+        .meta-grid {
+          margin-top: 14px;
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+          background: rgba(3, 12, 32, 0.45);
+          border: 1px solid rgba(100, 125, 164, 0.4);
+          border-radius: 12px;
+          padding: 12px;
+        }
+        .meta-grid div { font-size: 13px; color: #9bb3d9; }
+        .meta-grid strong { color: #e6f0ff; }
+        .actions-row {
+          margin-top: 14px;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+        .ghost-btn,
+        .primary-btn {
+          min-height: 44px;
+          border-radius: 10px;
+          font-weight: 700;
+          border: 1px solid rgba(113, 137, 177, 0.5);
+          cursor: pointer;
+        }
+        .ghost-btn {
+          background: #0a1833;
+          color: #c5d9ff;
+        }
+        .primary-btn {
+          background: linear-gradient(135deg, #2f7df8 0%, #1ecdb3 100%);
+          color: #fff;
+          border-color: transparent;
+        }
+        .ghost-btn:disabled,
+        .primary-btn:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+        @media (max-width: 760px) {
+          .booking-shell { padding: 10px; align-items: flex-start; }
+          .booking-modal { padding: 14px; border-radius: 14px; }
+          .modal-head h1 { font-size: 22px; }
+          .form-grid,
+          .meta-grid,
+          .actions-row { grid-template-columns: 1fr; }
+          .date-popup { width: calc(100vw - 44px); }
         }
       `}</style>
     </div>
