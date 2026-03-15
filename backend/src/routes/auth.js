@@ -115,6 +115,110 @@ function normalizeOtpBody(payload) {
   };
 }
 
+const TokenLoginInputSchema = z.object({
+  login: z.string().min(3),
+  token: z.string().min(10),
+});
+
+const TokenLoginSchema = z.union([
+  TokenLoginInputSchema,
+  z.object({ user: TokenLoginInputSchema }),
+]);
+
+function normalizeTokenLoginBody(payload) {
+  const input = payload.user ? payload.user : payload;
+  return {
+    login: input.login,
+    token: input.token,
+  };
+}
+
+async function createSessionForUser({ login, svpToken, svpExp }) {
+  const user = await prisma.user.upsert({
+    where: { login },
+    update: {
+      svpAccessEnc: encryptString(svpToken),
+    },
+    create: {
+      login,
+      svpAccessEnc: encryptString(svpToken),
+    },
+  });
+
+  const refreshRaw = randomToken(32);
+  const refreshHash = await bcrypt.hash(refreshRaw, 10);
+  const refreshDays = Number(process.env.REFRESH_TOKEN_TTL_DAYS || 14);
+  const refreshExpiresAt = new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000);
+
+  const session = await prisma.session.create({
+    data: {
+      userId: user.id,
+      refreshTokenHash: refreshHash,
+      refreshExpiresAt,
+      svpAccessEnc: encryptString(svpToken),
+      svpAccessExp: svpExp || null,
+    },
+  });
+
+  const accessToken = signAccess({
+    sub: user.id,
+    login: user.login,
+    sid: session.id,
+  });
+
+  return { user, session, refreshRaw, refreshDays, accessToken };
+}
+
+router.post('/token-login', async (req, res, next) => {
+  try {
+    const parsed = TokenLoginSchema.parse(req.body);
+    const { login, token: svpToken } = normalizeTokenLoginBody(parsed);
+
+    // Verify token by calling a basic authenticated SVP endpoint.
+    await svpRequest('/api/v1/individual_labor_space/permissions', {
+      method: 'GET',
+      token: svpToken,
+    });
+
+    const svpExp = null;
+    const { user, session, refreshRaw, refreshDays, accessToken } = await createSessionForUser({
+      login,
+      svpToken,
+      svpExp,
+    });
+
+    const secure = String(process.env.COOKIE_SECURE) === 'true';
+    const sameSite = process.env.COOKIE_SAMESITE || 'lax';
+    res.cookie('svp_rt', refreshRaw, {
+      httpOnly: true,
+      secure,
+      sameSite,
+      path: '/api/auth/refresh',
+      maxAge: refreshDays * 24 * 60 * 60 * 1000,
+    });
+    res.cookie('svp_sid', session.id, {
+      httpOnly: true,
+      secure,
+      sameSite,
+      path: '/api/auth/refresh',
+      maxAge: refreshDays * 24 * 60 * 60 * 1000,
+    });
+
+    res.json({
+      accessToken,
+      user: {
+        id: user.id,
+        login: user.login,
+        svpUserId: user.svpUserId,
+        email: user.email,
+        fullName: user.fullName,
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.post('/login', async (req, res, next) => {
   try {
     const parsed = LoginSchema.parse(req.body);
