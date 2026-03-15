@@ -64,12 +64,16 @@ function getAvailableDateCity(item) {
   if (!item || typeof item === 'string') return '';
   const siteCity = item.site_city;
   const normalizedSiteCity = typeof siteCity === 'object' ? (siteCity?.name || siteCity?.city || siteCity?.english_name || '') : siteCity;
+  const testCenterCity = item?.test_center?.city;
+  const normalizedTestCenterCity = typeof testCenterCity === 'object'
+    ? (testCenterCity?.name || testCenterCity?.city || testCenterCity?.english_name || '')
+    : testCenterCity;
   return String(
     item.city ||
       normalizedSiteCity ||
       item.site_city_name ||
       item.test_center_city ||
-      item.test_center?.city ||
+      normalizedTestCenterCity ||
       item.site?.city ||
       ''
   ).trim();
@@ -343,6 +347,7 @@ export default function BookingPage() {
       try {
         const startFromDate = normalizeDateValue(new Date().toISOString());
         const params = new URLSearchParams({
+          per_page: '1000',
           category_id: String(categoryId || DEFAULT_CATEGORY_ID),
           start_at_date_from: startFromDate,
           available_seats: 'greater_than::0',
