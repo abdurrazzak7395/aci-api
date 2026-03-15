@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { api } from '../../lib/api';
-import { executeRecaptcha } from '../../lib/recaptcha';
 
 export default function Otp() {
   const router = useRouter();
@@ -27,7 +26,6 @@ export default function Otp() {
     e.preventDefault();
     setMsg('Verifying OTP...');
     try {
-      const recaptchaResponse = await executeRecaptcha('svp_otp_verify');
       const res = await api('/api/auth/otp-verify', {
         method: 'POST',
         body: {
@@ -35,7 +33,6 @@ export default function Otp() {
           password,
           otpAttempt,
           otpMethod,
-          recaptchaResponse,
         },
       });
 

@@ -497,6 +497,11 @@ export default function BookingPage() {
                   }}
                   disabled={loadingDates || !availableDates.length}
                 />
+                {!loadingDates && selectedCity && !availableDates.length ? (
+                  <small style={{ color: '#b13d3d', display: 'block', marginTop: '4px' }}>
+                    No available dates found yet. Try another city, occupation, or wait a moment and refresh.
+                  </small>
+                ) : null}
               </div>
             ) : null}
           </div>
