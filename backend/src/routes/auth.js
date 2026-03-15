@@ -88,12 +88,6 @@ function normalizeLoginBody(payload) {
     login: input.login,
     password: input.password,
     otpMethod: input.otpMethod || input.otp_method || 'email',
-    recaptcha: pickFirst(
-      input.recaptchaResponse,
-      input.recaptcha_response,
-      input.recaptchaToken,
-      input.recaptcha_token,
-    ),
     feApp: input.fe_app || process.env.SVP_FE_APP || 'legislator',
   };
 }
@@ -221,18 +215,12 @@ router.post('/token-login', async (req, res, next) => {
 router.post('/login', async (req, res, next) => {
   try {
     const parsed = LoginSchema.parse(req.body);
-    const { login, password, otpMethod, recaptcha, feApp } = normalizeLoginBody(parsed);
-    if (!recaptcha) {
-      return res.status(400).json({
-        message: 'recaptchaResponse (or recaptcha_response) is required for SVP login',
-      });
-    }
+    const { login, password, otpMethod, feApp } = normalizeLoginBody(parsed);
     const userPayload = {
       login,
       password,
       otp_method: otpMethod,
       fe_app: feApp,
-      ...(recaptcha ? { recaptcha_response: recaptcha } : {}),
     };
 
     await svpRequest('/api/v1/sessions/login', {
