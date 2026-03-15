@@ -110,6 +110,7 @@ export default function ReservationsPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingId, setLoadingId] = useState('');
+  const [downloadingId, setDownloadingId] = useState('');
   const [error, setError] = useState('');
 
   async function loadReservations() {
@@ -174,6 +175,66 @@ export default function ReservationsPage() {
       setError(err?.message || 'Failed to start reschedule');
     } finally {
       setLoadingId('');
+    }
+  }
+
+  async function downloadTicket(item) {
+    const reservationId = getReservationId(item);
+    if (!reservationId) {
+      setError('Missing reservation ID for ticket download');
+      return;
+    }
+
+    setDownloadingId(String(reservationId));
+    setError('');
+    try {
+      const accessToken = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
+      const base = (process.env.NEXT_PUBLIC_BACKEND_URL || 'https://aci-api-production.up.railway.app').replace(/\/+$/, '');
+      const response = await fetch(`${base}/api/svp/tickets/${encodeURIComponent(reservationId)}/show-pdf?locale=en`, {
+        method: 'GET',
+        headers: {
+          Accept: '*/*',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || 'Failed to download ticket PDF');
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      const disposition = response.headers.get('content-disposition') || '';
+      const fallbackFileName = `ticket-${reservationId}.pdf`;
+      const fileNameMatch = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i);
+      const fileName = fileNameMatch ? decodeURIComponent(fileNameMatch[1]) : fallbackFileName;
+
+      const triggerDownload = (href, name) => {
+        const anchor = document.createElement('a');
+        anchor.href = href;
+        anchor.download = name;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+      };
+
+      if (contentType.includes('application/json')) {
+        const data = await response.json();
+        const url = data?.url || data?.pdf_url || data?.data?.url || data?.data?.pdf_url;
+        if (!url) throw new Error('Ticket PDF URL not found in response');
+        triggerDownload(String(url), fallbackFileName);
+        return;
+      }
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      triggerDownload(blobUrl, fileName);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } catch (err) {
+      setError(err?.message || 'Failed to download ticket');
+    } finally {
+      setDownloadingId('');
     }
   }
 
@@ -256,6 +317,15 @@ export default function ReservationsPage() {
                   disabled={loadingId === String(reservationId) || !canReschedule(item)}
                 >
                   {loadingId === String(reservationId) ? 'Opening...' : canReschedule(item) ? 'Reschedule' : 'Reschedule unavailable'}
+                </button>
+                <button
+                  className="secondary-btn"
+                  type="button"
+                  onClick={() => downloadTicket(item)}
+                  disabled={downloadingId === String(reservationId)}
+                  style={{ marginTop: '10px', width: '100%' }}
+                >
+                  {downloadingId === String(reservationId) ? 'Downloading...' : 'Download Ticket PDF'}
                 </button>
 
                 {!canReschedule(item) && getRescheduleReason(item) ? (
