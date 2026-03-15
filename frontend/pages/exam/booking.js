@@ -874,7 +874,7 @@ export default function BookingPage() {
           display: flex;
           align-items: center;
           justify-content: center;
-          background: #d6dde3;
+          background: #cecfd3;
           color: #d9e4ff;
         }
         .booking-modal {
