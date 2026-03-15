@@ -4,16 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../lib/api';
 
-const DEFAULT_CITY_OPTIONS = [
-  'Khulna',
-  'Nilphamari',
-  'Rajshahi',
-  'Barishal',
-  'Dhaka',
-  'Brahmanbaria',
-  'Sylhet',
-  'Chattogram',
-];
+const DEFAULT_CATEGORY_ID = '159';
 
 function pickArray(payload) {
   if (Array.isArray(payload)) return payload;
@@ -62,6 +53,44 @@ function normalizeDateValue(value) {
   return parsed.toISOString().slice(0, 10);
 }
 
+function getAvailableDateCity(item) {
+  if (!item || typeof item === 'string') return '';
+  return String(
+    item.city ||
+      item.site_city ||
+      item.site_city_name ||
+      item.test_center_city ||
+      item.test_center?.city ||
+      item.site?.city ||
+      ''
+  ).trim();
+}
+
+function getAvailableDateIso(item) {
+  if (typeof item === 'string') return normalizeDateValue(item);
+  return normalizeDateValue(
+    item?.date ||
+      item?.available_date ||
+      item?.exam_date ||
+      item?.start_at_date ||
+      item?.start_at ||
+      item?.scheduled_at ||
+      ''
+  );
+}
+
+function normalizeAvailableDateEntries(items) {
+  const map = new Map();
+  items.forEach((item) => {
+    const date = getAvailableDateIso(item);
+    const city = getAvailableDateCity(item);
+    if (!date || !city) return;
+    const key = `${city}__${date}`;
+    if (!map.has(key)) map.set(key, { city, date });
+  });
+  return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date) || a.city.localeCompare(b.city));
+}
+
 function getSessionId(item) {
   return item?.id || item?.session_id || item?.exam_session_id || '';
 }
@@ -105,9 +134,19 @@ function buildCenterOptions(items) {
   return Array.from(map.values());
 }
 
-function buildCityOptions(items) {
-  const fromSessions = items.map((item) => String(getSessionSiteCity(item) || '').trim()).filter(Boolean);
-  return Array.from(new Set([...DEFAULT_CITY_OPTIONS, ...fromSessions])).sort((a, b) => a.localeCompare(b));
+function buildCityOptions(entries) {
+  return Array.from(new Set(entries.map((item) => item.city).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
+function buildDateOptions(entries, city) {
+  return Array.from(
+    new Set(
+      entries
+        .filter((item) => (city ? String(item.city) === String(city) : true))
+        .map((item) => item.date)
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b));
 }
 
 function buildCalendarDays(activeMonth, availableDates) {
@@ -141,13 +180,13 @@ function formatDateLabel(value) {
 export default function BookingPage() {
   const router = useRouter();
   const [occupations, setOccupations] = useState([]);
-  const [availableDates, setAvailableDates] = useState([]);
+  const [availableDateEntries, setAvailableDateEntries] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [selectedOccupationId, setSelectedOccupationId] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
   const [availableDate, setAvailableDate] = useState('');
   const [calendarMonth, setCalendarMonth] = useState('');
-  const [categoryId, setCategoryId] = useState('');
+  const [categoryId, setCategoryId] = useState(DEFAULT_CATEGORY_ID);
   const [methodology, setMethodology] = useState('in_person');
   const [selectedCenterId, setSelectedCenterId] = useState('');
   const [siteId, setSiteId] = useState('');
@@ -169,7 +208,8 @@ export default function BookingPage() {
     [occupations, selectedOccupationId]
   );
 
-  const cityOptions = useMemo(() => buildCityOptions(sessions), [sessions]);
+  const cityOptions = useMemo(() => buildCityOptions(availableDateEntries), [availableDateEntries]);
+  const availableDates = useMemo(() => buildDateOptions(availableDateEntries, selectedCity), [availableDateEntries, selectedCity]);
   const cityFilteredSessions = useMemo(
     () => (selectedCity ? sessions.filter((item) => String(getSessionSiteCity(item)) === String(selectedCity)) : sessions),
     [sessions, selectedCity]
@@ -223,21 +263,21 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (!selectedOccupation) return;
-    setCategoryId((prev) => prev || String(selectedOccupation.categoryId || ''));
+    setCategoryId(String(selectedOccupation.categoryId || DEFAULT_CATEGORY_ID));
     setLanguageCode((prev) => prev || String(selectedOccupation.languageCodes[0]?.code || ''));
     setMethodology(String(selectedOccupation.methodology || 'in_person'));
     setSelectedCity('');
     setAvailableDate('');
+    setAvailableDateEntries([]);
     setSessions([]);
     setSelectedCenterId('');
     setSessionId('');
     setHoldId('');
     setReservationId('');
-  }, [selectedOccupationId]);
+  }, [selectedOccupation]);
 
   useEffect(() => {
     setAvailableDate('');
-    setAvailableDates([]);
     setSessions([]);
     setSelectedCenterId('');
     setSessionId('');
@@ -246,15 +286,15 @@ export default function BookingPage() {
     setHoldId('');
     setReservationId('');
     if (selectedCity) {
-      setStatus(`City selected: ${selectedCity}. Loading available dates from live API.`);
+      setStatus(`City selected: ${selectedCity}. Loading sessions for the selected date.`);
     }
   }, [selectedCity]);
 
   useEffect(() => {
     let active = true;
     async function loadDates() {
-      if (!selectedOccupationId || !selectedCity) {
-        setAvailableDates([]);
+      if (!selectedOccupationId) {
+        setAvailableDateEntries([]);
         setAvailableDate('');
         return;
       }
@@ -262,24 +302,23 @@ export default function BookingPage() {
       setLoadingDates(true);
       setError('');
       try {
+        const startFromDate = normalizeDateValue(new Date().toISOString());
         const params = new URLSearchParams({
-          occupation_id: String(selectedOccupationId),
-          city: String(selectedCity),
-          methodology_type: methodology || 'in_person',
+          category_id: String(categoryId || DEFAULT_CATEGORY_ID),
+          start_at_date_from: startFromDate,
+          available_seats: 'greater_than::0',
+          status: 'scheduled',
           locale: 'en',
         });
-        if (categoryId) params.set('category_id', categoryId);
         const data = await api(`/api/svp/available-dates?${params.toString()}`);
-        const dates = pickArray(data)
-          .map((item) => normalizeDateValue(typeof item === 'string' ? item : item?.date || item?.available_date || ''))
-          .filter(Boolean);
+        const entries = normalizeAvailableDateEntries(pickArray(data));
         if (!active) return;
-        setAvailableDates(dates);
-        setAvailableDate((prev) => (prev && dates.includes(prev) ? prev : dates[0] || ''));
-        setCalendarMonth(dates[0] ? dates[0].slice(0, 7) : normalizeDateValue(new Date().toISOString()).slice(0, 7));
+        const cities = buildCityOptions(entries);
+        setAvailableDateEntries(entries);
+        setSelectedCity((prev) => (prev && cities.includes(prev) ? prev : cities[0] || ''));
       } catch (err) {
         if (!active) return;
-        setAvailableDates([]);
+        setAvailableDateEntries([]);
         setError(err?.message || 'Failed to load available dates');
       } finally {
         if (active) setLoadingDates(false);
@@ -289,12 +328,17 @@ export default function BookingPage() {
     return () => {
       active = false;
     };
-  }, [selectedOccupationId, selectedCity, methodology, categoryId]);
+  }, [selectedOccupationId, categoryId]);
+
+  useEffect(() => {
+    setAvailableDate((prev) => (prev && availableDates.includes(prev) ? prev : availableDates[0] || ''));
+    setCalendarMonth(availableDates[0] ? availableDates[0].slice(0, 7) : normalizeDateValue(new Date().toISOString()).slice(0, 7));
+  }, [availableDates]);
 
   useEffect(() => {
     let active = true;
     async function loadSessions() {
-      if (!selectedOccupationId || !selectedCity || !availableDate) {
+      if (!selectedCity || !availableDate || !categoryId) {
         setSessions([]);
         return;
       }
@@ -303,13 +347,11 @@ export default function BookingPage() {
       setError('');
       try {
         const params = new URLSearchParams({
-          occupation_id: String(selectedOccupationId),
+          category_id: String(categoryId),
           city: String(selectedCity),
-          available_date: availableDate,
-          methodology_type: methodology || 'in_person',
+          exam_date: availableDate,
           locale: 'en',
         });
-        if (categoryId) params.set('category_id', categoryId);
         const data = await api(`/api/svp/exam-sessions?${params.toString()}`);
         if (!active) return;
         setSessions(pickArray(data));
@@ -325,7 +367,7 @@ export default function BookingPage() {
     return () => {
       active = false;
     };
-  }, [selectedOccupationId, selectedCity, availableDate, methodology, categoryId]);
+  }, [selectedCity, availableDate, categoryId]);
 
   useEffect(() => {
     if (!centerOptions.length) {
