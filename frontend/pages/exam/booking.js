@@ -81,6 +81,8 @@ function getAvailableDateIso(item) {
     item?.date ||
       item?.available_date ||
       item?.exam_date ||
+      item?.start_date_in_browser_time_zone ||
+      item?.start_date_in_tc_time_zone ||
       item?.start_at_date ||
       item?.start_at ||
       item?.scheduled_at ||
